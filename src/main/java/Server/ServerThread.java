@@ -1,22 +1,27 @@
 package Server;
 
+import Tools.Tools;
+
 import java.io.*;
 import java.net.*;
 import java.util.Arrays;
-import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 
 public class ServerThread extends Thread {
 
+    private int packetLength = 512;
     private DatagramSocket socket;
     private byte[] fileContent;
+    private HashSet<Integer> fileIdentifiers;
+
     public ServerThread() throws IOException {
         this("BWH");
     }
 
     private ServerThread(String name) throws IOException {
         super(name);
-
-        print("Hello Bart! :)");
 
         int port = 12555;
         try {
@@ -58,26 +63,37 @@ public class ServerThread extends Thread {
             e.printStackTrace();
         }
         System.out.println("Localhost = " + host);
-        int packetLength = 256;
         int numOfPackets = (int) Math.ceil((double) fileContent.length / packetLength);
         try {
-        for (int i = 0; i < numOfPackets; i++) {
-            byte[] buf = new byte[packetLength];
+            for (int i = 0; i <= numOfPackets; i++) {
+                byte[] buf = new byte[packetLength];
+                DatagramPacket packetRecieved = new DatagramPacket(buf, buf.length);
+                socket.receive(packetRecieved);
+                byte[] dataFromClient = packetRecieved.getData();
+                if (dataFromClient[0] == 0) {
+                    print("Client wants to upload");
+                } else if (dataFromClient[0] == 1) {
+                    print("Client wants to download");
+                } else {
+                    print("Corrupt message");
+                }
 
-            //receive request
-            DatagramPacket packetRecieved = new DatagramPacket(buf, buf.length);
-            socket.receive(packetRecieved);
+                byte[] packet;
+                if (i == 0) {
+                    packet = createInitialPacketContent(numOfPackets, fileContent.length, (byte) 0, "test.txt");
+                } else {
+                    packet = createPacketContent(i, (byte) 0, fileContent);
+                }
 
-            // send response
-            DatagramPacket packet = createPacket(fileContent, i , packetLength, packetRecieved.getAddress(), packetRecieved.getPort());
-            socket.send(packet);
-            } } catch (IOException e) {
-            print(e.getMessage());
+                // send response
+                DatagramPacket dp = new DatagramPacket(packet, packet.length, packetRecieved.getAddress(), packetRecieved.getPort());
+                socket.send(dp);
             }
+        } catch (IOException e) {
+            print(e.getMessage());
+        }
         socket.close();
     }
-
-
 
     private void print(String msg) {
         System.out.println(msg);
@@ -98,10 +114,48 @@ public class ServerThread extends Thread {
         }
 
     }
-    public DatagramPacket createPacket(byte[] fileContents, int ind, int packetLength, InetAddress address, int port) {
+
+    private DatagramPacket createPacket(byte[] fileContents, int ind, int packetLength, InetAddress address, int port) {
         byte[] packet = new byte[packetLength];
         int filePointer = ind * packetLength;
         System.arraycopy(fileContents, filePointer, packet, 0, packetLength);
         return new DatagramPacket(packet, packetLength, address, port);
     }
+
+    private byte[] createInitialPacketContent(int numOfPkts, int fileSize, byte identifier, String fileName) {
+        Map<Integer, byte[]> arrays = new HashMap<Integer, byte[]>();
+        arrays.put(0, Tools.intToByteArray(0)); // the packet number
+        arrays.put(1, Tools.intToByteArray(numOfPkts)); // total number of packets
+        arrays.put(2, Tools.intToByteArray(fileSize)); // file size
+        byte[] identifierByte = new byte[1];
+        identifierByte[0] = (byte) identifier;
+        arrays.put(3, identifierByte); // identifier
+        byte[] fileLengthIndicator = new byte[1];
+        fileLengthIndicator[0] = (byte) fileName.getBytes().length;
+        arrays.put(4, fileLengthIndicator);
+        arrays.put(5, fileName.getBytes()); // fileName
+        return Tools.appendThisMapToAnArray(arrays);
+    }
+
+    private byte[] createPacketContent(int pktNum, int identifier, byte[] data) {
+        Map<Integer, byte[]> arrays = new HashMap<Integer, byte[]>();
+        arrays.put(0, Tools.intToByteArray(pktNum)); // the packet number
+        byte[] identifierByte = new byte[1];
+        identifierByte[0] = (byte) identifier;
+        arrays.put(1, identifierByte); // identifier
+        byte[] header = Tools.appendThisMapToAnArray(arrays);
+        int bytesLeft = packetLength - header.length;
+        byte[] dataToSend = Arrays.copyOfRange(data, packetLength * (pktNum - 1), (packetLength * pktNum) - 1);
+        return Tools.appendBytes(header, dataToSend);
+    }
+
+    private byte[] createChecksum() {
+        return null;
+    }
+
+    private byte[] writeHeader() {
+        return null;
+    }
+
+
 }
