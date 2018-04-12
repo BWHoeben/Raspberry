@@ -115,20 +115,20 @@ public class ServerThread extends Thread {
 
     }
 
-    private DatagramPacket createPacket(byte[] fileContents, int ind, int packetLength, InetAddress address, int port) {
-        byte[] packet = new byte[packetLength];
-        int filePointer = ind * packetLength;
-        System.arraycopy(fileContents, filePointer, packet, 0, packetLength);
-        return new DatagramPacket(packet, packetLength, address, port);
-    }
+    //private DatagramPacket createPacket(byte[] fileContents, int ind, int packetLength, InetAddress address, int port) {
+     //   byte[] packet = new byte[packetLength];
+     //   int filePointer = ind * packetLength;
+     //   System.arraycopy(fileContents, filePointer, packet, 0, packetLength);
+     //   return new DatagramPacket(packet, packetLength, address, port);
+    //}
 
     private byte[] createInitialPacketContent(int numOfPkts, int fileSize, byte identifier, String fileName) {
-        Map<Integer, byte[]> arrays = new HashMap<Integer, byte[]>();
+        Map<Integer, byte[]> arrays = new HashMap<>();
         arrays.put(0, Tools.intToByteArray(0)); // the packet number
         arrays.put(1, Tools.intToByteArray(numOfPkts)); // total number of packets
         arrays.put(2, Tools.intToByteArray(fileSize)); // file size
         byte[] identifierByte = new byte[1];
-        identifierByte[0] = (byte) identifier;
+        identifierByte[0] = identifier;
         arrays.put(3, identifierByte); // identifier
         byte[] fileLengthIndicator = new byte[1];
         fileLengthIndicator[0] = (byte) fileName.getBytes().length;
@@ -138,14 +138,14 @@ public class ServerThread extends Thread {
     }
 
     private byte[] createPacketContent(int pktNum, int identifier, byte[] data) {
-        Map<Integer, byte[]> arrays = new HashMap<Integer, byte[]>();
+        Map<Integer, byte[]> arrays = new HashMap<>();
         arrays.put(0, Tools.intToByteArray(pktNum)); // the packet number
         byte[] identifierByte = new byte[1];
         identifierByte[0] = (byte) identifier;
         arrays.put(1, identifierByte); // identifier
         byte[] header = Tools.appendThisMapToAnArray(arrays);
         int bytesLeft = packetLength - header.length;
-        byte[] dataToSend = Arrays.copyOfRange(data, packetLength * (pktNum - 1), (packetLength * pktNum) - 1);
+        byte[] dataToSend = Arrays.copyOfRange(data, packetLength * (pktNum - 1), (packetLength * pktNum) - 1 + bytesLeft);
         return Tools.appendBytes(header, dataToSend);
     }
 
