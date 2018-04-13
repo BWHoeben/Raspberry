@@ -126,12 +126,12 @@ public class Client {
         byte[] pktNum = Arrays.copyOfRange(data, 2, 6);
         int pktNumber = ByteBuffer.wrap(pktNum).getInt();
         print("Server send packet " + pktNumber +  " for download " + identifier + " with size: " + packet.getData().length);
+        sendAcknowledgement(packet.getAddress(), packet.getPort(), pktNumber, identifier);
         download.pktTransfered(pktNumber);
         byte[] dataLen = Arrays.copyOfRange(data, 6, 10);
         int dataLength = ByteBuffer.wrap(dataLen).getInt();
         byte[] receivedData = Arrays.copyOfRange(data, 10, 10 + dataLength);
         download.addData(pktNumber, receivedData);
-        sendAcknowledgement(packet.getAddress(), packet.getPort(), pktNumber, identifier);
         if (download.isComplete()) {
             downloads.remove(identifier);
             if (downloads.size() + uploads.size() == 0) {

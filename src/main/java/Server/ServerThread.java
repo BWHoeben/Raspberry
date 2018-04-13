@@ -1,10 +1,7 @@
 package Server;
 
 import Tools.Tools;
-import UDP.Destination;
-import UDP.Download;
-import UDP.PacketState;
-import UDP.Upload;
+import UDP.*;
 
 import java.io.*;
 import java.net.*;
@@ -19,10 +16,11 @@ public class ServerThread extends Thread {
     private DatagramSocket socket;
     private HashMap<Byte, Download> downloads = new HashMap<>();
     private HashMap<Byte, Upload> uploads = new HashMap<>();
-    private int slidingWindow = 5;
+    private int slidingWindow = 50;
     private HashMap<Byte, PacketState[]> packetStates = new HashMap<>();
     private HashMap<Byte, HashMap<Integer, Timer>> timers = new HashMap<>();
-    private int timeOut = 10;
+    private int timeOut = 1;
+    private UploadThread ut;
 
     public ServerThread() throws IOException {
         this("BWH");
@@ -160,7 +158,7 @@ public class ServerThread extends Thread {
         }
     }
 
-    private int packetsInTheAir(byte identifier) {
+    public int packetsInTheAir(byte identifier) {
         PacketState[] states = packetStates.get(identifier);
         int counter = 0;
         for (PacketState state : states) {
@@ -171,7 +169,7 @@ public class ServerThread extends Thread {
             return counter;
     }
 
-    private int[] getPacketsToTransmit(byte identifier, int numberOfPacketsToTransmit) {
+    public int[] getPacketsToTransmit(byte identifier, int numberOfPacketsToTransmit) {
         PacketState[] states = packetStates.get(identifier);
         int totalPkts = states.length;
         int i = 0;
@@ -190,7 +188,7 @@ public class ServerThread extends Thread {
         return packetsToReturn;
     }
 
-    private void continueUpload(Upload upload) {
+    private synchronized void continueUpload(Upload upload) {
         int numberOfPktsToTransmit = slidingWindow - packetsInTheAir(upload.getIdentifier());
         int[] packetsToTransmit = getPacketsToTransmit(upload.getIdentifier(), numberOfPktsToTransmit);
         Destination destination = upload.getDestination();
@@ -211,7 +209,7 @@ public class ServerThread extends Thread {
         }
     }
 
-    private void setTimerForPacket(byte identifier, int packetNumber) {
+    public void setTimerForPacket(byte identifier, int packetNumber) {
         HashMap<Integer, Timer> timeMap;
         if (timers.containsKey(identifier)) {
             timeMap = timers.get(identifier);
