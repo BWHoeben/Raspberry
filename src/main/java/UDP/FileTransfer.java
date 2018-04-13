@@ -36,7 +36,7 @@ public abstract class FileTransfer {
     public void setParameters(String fileName, int numberOfPkts, int fileSize, byte identifier, int packetLength) {
         //this.fileName = fileName;
         this.fileSize = fileSize;
-        this.fileName = "pic.bmp";
+        this.fileName = "pic.txt";
         this.numberOfPkts = numberOfPkts;
         this.identifier = identifier;
         this.pktsTransfered = new boolean[numberOfPkts];
@@ -49,5 +49,9 @@ public abstract class FileTransfer {
         if (numberOfPkts == numberOfPktsTransfered) {
             isComplete = true;
         }
+    }
+
+    public byte getIdentifier() {
+        return identifier;
     }
 }

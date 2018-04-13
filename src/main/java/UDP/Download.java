@@ -16,10 +16,10 @@ public class Download extends FileTransfer {
     private DataOutputStream dataOutputStream;
     private DownloadThread dt;
     private int writtenUntil = 0;
-    private int written = 0;
+    private long time;
 
     public Download() {
-
+        time = System.nanoTime();
     }
 
     public void addData(int pktNum, byte[] data) {
@@ -51,6 +51,9 @@ public class Download extends FileTransfer {
             } catch (IOException e) {
                 e.printStackTrace();
             }
+            long elapsedTime = System.nanoTime() - time;
+            long timeInSec = elapsedTime / 1000000000;
+            System.out.println("Time elapsed: " + timeInSec + " seconds");
         }
     }
 

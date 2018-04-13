@@ -15,7 +15,7 @@ public class Tools {
             dos.writeInt(integer);
             dos.flush();
         } catch (IOException e) {
-            e.printStackTrace();
+            System.out.println(e.getMessage());
         }
 
         return bos.toByteArray();

@@ -3,6 +3,7 @@ package Server;
 import Tools.Tools;
 import UDP.Destination;
 import UDP.Download;
+import UDP.PacketState;
 import UDP.Upload;
 
 import java.io.*;
@@ -10,10 +11,7 @@ import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
+import java.util.*;
 
 public class ServerThread extends Thread {
 
@@ -21,6 +19,10 @@ public class ServerThread extends Thread {
     private DatagramSocket socket;
     private HashMap<Byte, Download> downloads = new HashMap<>();
     private HashMap<Byte, Upload> uploads = new HashMap<>();
+    private int slidingWindow = 5;
+    private HashMap<Byte, PacketState[]> packetStates = new HashMap<>();
+    private HashMap<Byte, HashMap<Integer, Timer>> timers = new HashMap<>();
+    private int timeOut = 10;
 
     public ServerThread() throws IOException {
         this("BWH");
@@ -61,10 +63,6 @@ public class ServerThread extends Thread {
         }
     }
 
-    private void print(String msg) {
-        System.out.println(msg);
-    }
-
     private void handlePacketFromClient(DatagramPacket packet, DatagramSocket socket) {
         byte[] dataFromClient = packet.getData();
         byte firstByte = dataFromClient[0];
@@ -77,7 +75,7 @@ public class ServerThread extends Thread {
                 listFiles(packet, socket);
                 break;
             case 2:
-                startDownload(packet);
+                startUpload(packet);
                 break;
             case 3:
                 processAcknowledgement(packet);
@@ -89,7 +87,7 @@ public class ServerThread extends Thread {
     }
 
 
-    private void startDownload(DatagramPacket packet) {
+    private void startUpload(DatagramPacket packet) {
         byte[] message = packet.getData();
         int filenameLengthIndicator = (int) message[1];
         byte[] filenameBytes = new byte[filenameLengthIndicator];
@@ -98,8 +96,7 @@ public class ServerThread extends Thread {
         }
         String fileName = new String(filenameBytes);
         print("Client requested: " + fileName);
-        byte[] fileContent = new byte[0];
-            fileContent = getFileContentsFast(fileName);
+        byte[] fileContent = getFileContentsFast(fileName);
         int numOfPackets = (int) Math.ceil((double) fileContent.length / (packetLength - 10)) + 1;
         Destination destination = new Destination(packet.getPort(), packet.getAddress());
         byte[] packetContent = createInitialPacketContent(numOfPackets, fileContent.length, fileName, destination, fileContent);
@@ -109,80 +106,6 @@ public class ServerThread extends Thread {
         } catch (IOException e) {
             print(e.getMessage());
         }
-    }
-
-    private void listFiles(DatagramPacket packet, DatagramSocket socket) {
-        HashSet<String> fileNames = getFilenames();
-        int bytesNeeded = 1;
-        for (String fileName : fileNames) {
-            bytesNeeded = bytesNeeded + 1 + fileName.getBytes().length;
-        }
-        byte[] buf = new byte[bytesNeeded];
-        buf[0] = 0; // indicate that this is a list of files
-        int filePointer = 1;
-        for (String fileName : fileNames) {
-            byte[] fileNameBytes = fileName.getBytes();
-            buf[filePointer] = (byte) fileNameBytes.length;
-            filePointer++;
-            for (int i = 0; i < fileNameBytes.length; i++) {
-                buf[filePointer] = fileNameBytes[i];
-                filePointer++;
-            }
-        }
-        DatagramPacket dp = new DatagramPacket(buf, buf.length, packet.getAddress(), packet.getPort());
-        try {
-            socket.send(dp);
-        } catch (IOException e) {
-            print(e.getMessage());
-        }
-
-    }
-
-    private void processAcknowledgement(DatagramPacket packet) {
-        byte[] data = packet.getData();
-        byte identifier = data[1];
-        byte[] pktNum = Arrays.copyOfRange(packet.getData(), 2, 6);
-        int pktNumber = ByteBuffer.wrap(pktNum).getInt();
-        print("Acknowledgement received. Packet#: " + pktNumber + " Identifier: " + identifier);
-        Upload upload = uploads.get(identifier);
-        upload.pktTransfered(pktNumber);
-        if (upload.isComplete()) {
-            print("Upload completed!");
-            uploads.remove(identifier);
-        } else {
-            continueUpload(upload);
-        }
-    }
-
-    private void continueUpload(Upload upload) {
-        byte[] dataToSend = upload.getPacketData(upload.completeUntill());
-        Destination destination = upload.getDestination();
-        DatagramPacket packet = new DatagramPacket(dataToSend, dataToSend.length, destination.getAddress(), destination.getPort());
-        try {
-            socket.send(packet);
-            print("Packet send: " + upload.completeUntill());
-        } catch (IOException e) {
-            print(e.getMessage());
-        }
-    }
-
-    private byte[] getFileContentsFast(String fileName) {
-        print("Start reading file...");
-
-        try {
-            try (FileChannel channel = new FileInputStream(fileName).getChannel()) {
-                MappedByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
-                channel.close();
-                byte[] data = new byte[buffer.remaining()];
-                buffer.get(data);
-                return data;
-            }
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return new byte[0];
     }
 
     private byte[] createInitialPacketContent(int numOfPkts, int fileSize, String fileName, Destination destination, byte[] data) {
@@ -204,11 +127,120 @@ public class ServerThread extends Thread {
         Upload upload = new Upload(destination, data);
         upload.setParameters(fileName, numOfPkts, fileSize, identifier, packetLength);
         uploads.put(identifier, upload);
-
+        initializePacketStates(identifier, numOfPkts);
         return Tools.appendThisMapToAnArray(arrays);
     }
 
-    private byte getIdentifierForDownload() {
+    private void initializePacketStates(byte identifier, int numberOfPkts) {
+        PacketState[] states = new PacketState[numberOfPkts];
+        for (int i = 0; i < numberOfPkts; i++) {
+            states[i] = PacketState.INQUEUE;
+        }
+        packetStates.put(identifier, states);
+    }
+
+    private void processAcknowledgement(DatagramPacket packet) {
+        byte[] data = packet.getData();
+        byte identifier = data[1];
+        byte[] pktNum = Arrays.copyOfRange(packet.getData(), 2, 6);
+        int pktNumber = ByteBuffer.wrap(pktNum).getInt();
+        if (pktNumber != 0) {
+            cancelTimerForPacket(identifier, pktNumber);
+        }
+        print("Acknowledgement received. Packet#: " + pktNumber + " Identifier: " + identifier);
+        Upload upload = uploads.get(identifier);
+        upload.pktTransfered(pktNumber);
+        PacketState[] states = packetStates.get(identifier);
+        states[pktNumber] = PacketState.ACKNOWLEDGED;
+        if (upload.isComplete()) {
+            print("Upload completed!");
+            uploads.remove(identifier);
+        } else {
+            continueUpload(upload);
+        }
+    }
+
+    private int packetsInTheAir(byte identifier) {
+        PacketState[] states = packetStates.get(identifier);
+        int counter = 0;
+        for (PacketState state : states) {
+            if (state.equals(PacketState.SEND)) {
+                counter++;
+            }
+        }
+            return counter;
+    }
+
+    private int[] getPacketsToTransmit(byte identifier, int numberOfPacketsToTransmit) {
+        PacketState[] states = packetStates.get(identifier);
+        int totalPkts = states.length;
+        int i = 0;
+        int pktsSelected = 0;
+        int[] packetsToReturn = new int[numberOfPacketsToTransmit];
+        while (i < totalPkts && pktsSelected < numberOfPacketsToTransmit) {
+            if (states[i].equals(PacketState.INQUEUE) || states[i].equals(PacketState.TIMEDOUT)) {
+                packetsToReturn[pktsSelected] = i;
+                pktsSelected++;
+            }
+            i++;
+        }
+        if (pktsSelected != numberOfPacketsToTransmit) {
+            packetsToReturn = Arrays.copyOfRange(packetsToReturn,0,pktsSelected);
+        }
+        return packetsToReturn;
+    }
+
+    private void continueUpload(Upload upload) {
+        int numberOfPktsToTransmit = slidingWindow - packetsInTheAir(upload.getIdentifier());
+        int[] packetsToTransmit = getPacketsToTransmit(upload.getIdentifier(), numberOfPktsToTransmit);
+        Destination destination = upload.getDestination();
+        for (int i = 0; i < packetsToTransmit.length; i++) {
+            int pktNumber = packetsToTransmit[i];
+            byte[] dataToSend = upload.getPacketData(pktNumber);
+            DatagramPacket packet = new DatagramPacket(dataToSend, dataToSend.length, destination.getAddress(), destination.getPort());
+            try {
+                socket.send(packet);
+                setTimerForPacket(upload.getIdentifier(), pktNumber);
+                byte identifier = upload.getIdentifier();
+                PacketState[] states = packetStates.get(identifier);
+                states[pktNumber] = PacketState.SEND;
+                print("Packet send: " + pktNumber);
+            } catch (IOException e) {
+                print(e.getMessage());
+            }
+        }
+    }
+
+    private void setTimerForPacket(byte identifier, int packetNumber) {
+        HashMap<Integer, Timer> timeMap;
+        if (timers.containsKey(identifier)) {
+            timeMap = timers.get(identifier);
+        } else {
+            timeMap = new HashMap<>();
+            timers.put(identifier, timeMap);
+        }
+        Timer timer = new Timer();
+        timer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                print("Packet " + packetNumber + " timed out");
+                PacketState[] states = packetStates.get(identifier);
+                states[packetNumber] = PacketState.TIMEDOUT;
+                Upload upload = uploads.get(identifier);
+                continueUpload(upload);
+            }
+        },
+        timeOut * 1000
+        );
+        timeMap.put(packetNumber, timer);
+    }
+
+    private void cancelTimerForPacket(byte identifier, int packetNumber) {
+        Timer timer = timers.get(identifier).get(packetNumber);
+        timer.cancel();
+    }
+
+   private byte getIdentifierForDownload() {
         boolean loop = true;
         byte b = 0;
         if (downloads.size() > 1) {
@@ -253,5 +285,52 @@ public class ServerThread extends Thread {
             }
         }
         return set;
+    }
+
+    private void listFiles(DatagramPacket packet, DatagramSocket socket) {
+        HashSet<String> fileNames = getFilenames();
+        int bytesNeeded = 1;
+        for (String fileName : fileNames) {
+            bytesNeeded = bytesNeeded + 1 + fileName.getBytes().length;
+        }
+        byte[] buf = new byte[bytesNeeded];
+        buf[0] = 0; // indicate that this is a list of files
+        int filePointer = 1;
+        for (String fileName : fileNames) {
+            byte[] fileNameBytes = fileName.getBytes();
+            buf[filePointer] = (byte) fileNameBytes.length;
+            filePointer++;
+            for (int i = 0; i < fileNameBytes.length; i++) {
+                buf[filePointer] = fileNameBytes[i];
+                filePointer++;
+            }
+        }
+        DatagramPacket dp = new DatagramPacket(buf, buf.length, packet.getAddress(), packet.getPort());
+        try {
+            socket.send(dp);
+        } catch (IOException e) {
+            print(e.getMessage());
+        }
+
+    }
+
+    private byte[] getFileContentsFast(String fileName) {
+        print("Start reading file...");
+
+        try {
+            try (FileChannel channel = new FileInputStream(fileName).getChannel()) {
+                MappedByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
+                byte[] data = new byte[buffer.remaining()];
+                buffer.get(data);
+                return data;
+            }
+        } catch (IOException e) {
+            print(e.getMessage());
+        }
+        return new byte[0];
+    }
+
+    private void print(String msg) {
+        System.out.println(msg);
     }
 }

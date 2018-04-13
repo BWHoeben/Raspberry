@@ -22,7 +22,7 @@ public class Client {
         new Client();
     }
 
-    public Client() {
+    private Client() {
         InetAddress address = askForHost();
         print("Inet address created.");
         upOrDown(address);
@@ -60,16 +60,11 @@ public class Client {
         arrays.put(2, Tools.intToByteArray(pktNumber)); // pktNumber
         byte[] ack = Tools.appendThisMapToAnArray(arrays);
         DatagramPacket pkt = new DatagramPacket(ack, ack.length, address, port);
-        // print("Sending ack for pkt: " + pktNumber);
         try {
             socket.send(pkt);
         } catch (IOException e) {
             print(e.getMessage());
         }
-    }
-
-    public byte[] stripHeader(int headerLength, byte[] data) {
-        return Arrays.copyOfRange(data, headerLength, data.length);
     }
 
     private void upload(InetAddress address) {
@@ -83,7 +78,7 @@ public class Client {
         }
     }
 
-    public void listenForPackets(InetAddress address, int port, DatagramSocket socket) {
+    private void listenForPackets(InetAddress address, int port, DatagramSocket socket) {
         print("Listening for incoming packets");
         listen = true;
         byte[] buf = new byte[packetLength];
@@ -92,13 +87,13 @@ public class Client {
             try {
                 socket.receive(packet);
             } catch (IOException e) {
-                e.printStackTrace();
+                print(e.getMessage());
             }
             handlePacket(packet);
         }
     }
 
-    public void handlePacket(DatagramPacket packet) {
+    private void handlePacket(DatagramPacket packet) {
         byte[] data = packet.getData();
         byte ind = data[0];
         switch (ind) {
@@ -150,7 +145,7 @@ public class Client {
         boolean read = true;
         int filePointer = 1;
         int indicator = 0;
-        HashSet<String> fileNames = new HashSet<String>();
+        HashSet<String> fileNames = new HashSet<>();
         while (read) {
             indicator = (int) data[filePointer];
             if (indicator <= 0) {
