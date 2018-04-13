@@ -1,8 +1,6 @@
 package Tools;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.util.Map;
 
 public class Tools {
@@ -32,9 +30,17 @@ public class Tools {
 
     public static byte[] appendThisMapToAnArray(Map<Integer, byte[]> map) {
      byte[] returnArray = new byte[0];
-        for (int i = 0; i < map.size(); i++) {
-            returnArray = appendBytes(returnArray, map.get(i));
-        }
+     int entriesInMap = map.size();
+     int entriesObtained = 0;
+     int i = 0;
+     while (entriesObtained < entriesInMap) {
+         if (map.containsKey(i)) {
+             returnArray = appendBytes(returnArray, map.get(i));
+             entriesObtained++;
+         }
+     i++;
+     }
         return returnArray;
     }
+
 }

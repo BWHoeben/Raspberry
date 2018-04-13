@@ -1,16 +1,21 @@
 package Test;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.IOException;
 
 public class Test {
 
     public static void main(String[] args) {
-        String fileName = "Hello.txt";
-        byte[] fileNameByte = new byte[60];
-        fileNameByte = fileName.getBytes();
-        System.out.println(fileNameByte.length);
+        File folder = new File(System.getProperty("user.dir"));
+        File[] listOfFiles = folder.listFiles();
 
-
+        for (int i = 0; i < listOfFiles.length; i++) {
+            if (listOfFiles[i].isFile()) {
+                System.out.println("File " + listOfFiles[i].getName());
+            //} else if (listOfFiles[i].isDirectory()) {
+            //    System.out.println("Directory " + listOfFiles[i].getName());
+            }
+        }
         }
 }
