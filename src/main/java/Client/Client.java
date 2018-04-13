@@ -130,7 +130,7 @@ public class Client {
         Download download = downloads.get(identifier);
         byte[] pktNum = Arrays.copyOfRange(data, 2, 6);
         int pktNumber = ByteBuffer.wrap(pktNum).getInt();
-        //print("Server send packet " + pktNumber +  " for download " + identifier + " with size: " + packet.getData().length);
+        print("Server send packet " + pktNumber +  " for download " + identifier + " with size: " + packet.getData().length);
         download.pktTransfered(pktNumber);
         byte[] dataLen = Arrays.copyOfRange(data, 6, 10);
         int dataLength = ByteBuffer.wrap(dataLen).getInt();

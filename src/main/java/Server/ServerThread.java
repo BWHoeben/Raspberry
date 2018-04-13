@@ -99,12 +99,8 @@ public class ServerThread extends Thread {
         String fileName = new String(filenameBytes);
         print("Client requested: " + fileName);
         byte[] fileContent = new byte[0];
-       // try {
             fileContent = getFileContentsFast(fileName);
-        //} catch (FileNotFoundException e) {
-        //    print(e.getMessage());
-        //}
-        int numOfPackets = (int) Math.ceil((double) fileContent.length / packetLength) + 2;
+        int numOfPackets = (int) Math.ceil((double) fileContent.length / (packetLength - 10)) + 1;
         Destination destination = new Destination(packet.getPort(), packet.getAddress());
         byte[] packetContent = createInitialPacketContent(numOfPackets, fileContent.length, fileName, destination, fileContent);
         DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, packet.getAddress(), packet.getPort());
@@ -168,24 +164,6 @@ public class ServerThread extends Thread {
         } catch (IOException e) {
             print(e.getMessage());
         }
-    }
-
-    private byte[] getFileContents(String fileName) throws FileNotFoundException {
-        print("Start reading file...");
-        File fileToTransmit = new File(fileName);
-        try (FileInputStream fileInputStream = new FileInputStream(fileToTransmit)) {
-            byte[] fileContents = new byte[(int) fileToTransmit.length()];
-            for (int i = 0; i < fileContents.length; i++) {
-                int nextByte = fileInputStream.read();
-                fileContents[i] = (byte) nextByte;
-            }
-            print("Done reading file...");
-            return fileContents;
-        } catch (Exception e) {
-            print(e.getMessage());
-            return new byte[0];
-        }
-
     }
 
     private byte[] getFileContentsFast(String fileName) {

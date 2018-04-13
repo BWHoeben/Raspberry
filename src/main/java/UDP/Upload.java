@@ -33,6 +33,7 @@ public class Upload extends FileTransfer {
         int bytesLeft = packetLength - header.length - 4;
         int from = bytesLeft * (packetNumber - 1);
         int to = Math.min(packetNumber * bytesLeft, data.length);
+        from = Math.min(from,to);
         byte[] dataToSend = Arrays.copyOfRange(data, from, to);
         int dataLengthIndicator = dataToSend.length;
         byte[] dataLen = Tools.intToByteArray(dataLengthIndicator);
