@@ -1,23 +1,16 @@
 package Server;
 
+import Tools.Protocol;
 import Tools.Tools;
-import UDP.Destination;
-import UDP.Download;
-import UDP.Upload;
+import UDP.*;
 
 import java.io.*;
 import java.net.*;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
+import java.util.*;
 
 public class ServerThread extends Thread {
 
-    private int packetLength = 2048 * 8;
     private DatagramSocket socket;
     private HashMap<Byte, Download> downloads = new HashMap<>();
     private HashMap<Byte, Upload> uploads = new HashMap<>();
@@ -29,12 +22,12 @@ public class ServerThread extends Thread {
     private ServerThread(String name) throws IOException {
         super(name);
 
-        int port = 12555;
+        int port = Tools.getPort();
         try {
             socket = new DatagramSocket(port);
             print("Created socket on port: " + port);
         } catch (SocketException e) {
-            System.err.println("Could not create socket on port: " + port);
+            print("Could not create socket on port: " + port);
             print(e.getMessage());
         }
     }
@@ -50,37 +43,49 @@ public class ServerThread extends Thread {
         }
         print("Localhost = " + host);
         while (true) {
-            byte[] buf = new byte[packetLength];
+            byte[] buf = new byte[Tools.getPacketLength()];
             DatagramPacket packetReceived = new DatagramPacket(buf, buf.length);
             try {
                 socket.receive(packetReceived);
             } catch (IOException e) {
-                e.printStackTrace();
+                print(e.getMessage());
             }
             handlePacketFromClient(packetReceived, socket);
         }
-    }
-
-    private void print(String msg) {
-        System.out.println(msg);
     }
 
     private void handlePacketFromClient(DatagramPacket packet, DatagramSocket socket) {
         byte[] dataFromClient = packet.getData();
         byte firstByte = dataFromClient[0];
         switch (firstByte) {
-            case 0:
-                print("Client wants to upload.");
-                break;
-            case 1:
+            case Protocol.SHOWFILES:
                 print("Client requested list of files.");
                 listFiles(packet, socket);
                 break;
-            case 2:
-                startDownload(packet);
+            case Protocol.INITUP:
+                print("Client wants to upload.");
+                Tools.handleInitialPacket(packet, downloads, socket);
                 break;
-            case 3:
-                processAcknowledgement(packet);
+            case Protocol.REQDOWN:
+                startUpload(packet);
+                break;
+            case Protocol.ADDUP:
+                downloadPacket(packet);
+                break;
+            case Protocol.ACKDOWN:
+                Tools.processAcknowledgement(packet, uploads);
+                break;
+            case Protocol.PAUSE:
+                print("Client wants to pauze file transfer.");
+                pauseTransfer(packet);
+                break;
+            case Protocol.RESUME:
+                print("Client wants to resume file transfer.");
+                resumeTransfer(packet);
+                break;
+            case Protocol.ABORT:
+                print("Client wants to abort file transfer.");
+                abortTransfer(packet);
                 break;
             default:
                 print("Received message does not adhere to protocol. Discarding message.");
@@ -88,8 +93,36 @@ public class ServerThread extends Thread {
         }
     }
 
+    private void downloadPacket(DatagramPacket packet) {
+        boolean downloadComplete = Tools.processDownloadPacket(packet, downloads, socket);
+        if (downloadComplete) {
+            print("Download complete");
+        }
+    }
 
-    private void startDownload(DatagramPacket packet) {
+    private void abortTransfer(DatagramPacket packet) {
+        byte[] msg = packet.getData();
+        byte identifier = msg[1];
+        Upload upload = uploads.get(identifier);
+        upload.abort();
+        uploads.remove(identifier);
+    }
+
+    private void resumeTransfer(DatagramPacket packet) {
+        byte[] msg = packet.getData();
+        byte identifier = msg[1];
+        Upload upload = uploads.get(identifier);
+        upload.resume();
+    }
+
+    private void pauseTransfer(DatagramPacket packet) {
+        byte[] msg = packet.getData();
+        byte identifier = msg[1];
+        Upload upload = uploads.get(identifier);
+        upload.pause();
+    }
+
+    private void startUpload(DatagramPacket packet) {
         byte[] message = packet.getData();
         int filenameLengthIndicator = (int) message[1];
         byte[] filenameBytes = new byte[filenameLengthIndicator];
@@ -98,31 +131,58 @@ public class ServerThread extends Thread {
         }
         String fileName = new String(filenameBytes);
         print("Client requested: " + fileName);
-        byte[] fileContent = new byte[0];
-       // try {
-            fileContent = getFileContentsFast(fileName);
-        //} catch (FileNotFoundException e) {
-        //    print(e.getMessage());
-        //}
-        int numOfPackets = (int) Math.ceil((double) fileContent.length / packetLength) + 2;
-        Destination destination = new Destination(packet.getPort(), packet.getAddress());
-        byte[] packetContent = createInitialPacketContent(numOfPackets, fileContent.length, fileName, destination, fileContent);
-        DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, packet.getAddress(), packet.getPort());
         try {
-            socket.send(initialPacket);
+            byte[] fileContent = Tools.getFileContents(fileName);
+            Destination destination = new Destination(packet.getPort(), packet.getAddress());
+            byte[] packetContent = Tools.createInitialPacketContentForUpload(fileName, destination, fileContent, socket, uploads);
+            DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, packet.getAddress(), packet.getPort());
+            try {
+                socket.send(initialPacket);
+            } catch (IOException e) {
+                print(e.getMessage());
+            }
         } catch (IOException e) {
-            print(e.getMessage());
+            print("File could not be read!");
+            sendInvalidReq(packet, filenameBytes, filenameLengthIndicator);
         }
     }
 
+    private void sendInvalidReq(DatagramPacket packet, byte[] filename, int fileLengthIndicator) {
+        byte[] packetToSend = new byte[Tools.getPacketLength()];
+        packetToSend[0] = Protocol.INVALIDREQ;
+        packetToSend[1] = (byte) fileLengthIndicator;
+        for (int i = 0; i < fileLengthIndicator; i++) {
+            packetToSend[2 + i] = filename[i];
+        }
+    }
+
+    private byte getIdentifierForDownload() {
+        boolean loop = true;
+        byte b = 0;
+        if (downloads.size() > 1) {
+            while (loop) {
+                if (downloads.containsKey(b)) {
+                    b++;
+                } else {
+                    loop = false;
+                }
+            }
+        }
+        return b;
+    }
+
+    private byte[] createChecksum() {
+        return null;
+    }
+
     private void listFiles(DatagramPacket packet, DatagramSocket socket) {
-        HashSet<String> fileNames = getFilenames();
+        HashSet<String> fileNames = Tools.getFilenames();
         int bytesNeeded = 1;
         for (String fileName : fileNames) {
             bytesNeeded = bytesNeeded + 1 + fileName.getBytes().length;
         }
         byte[] buf = new byte[bytesNeeded];
-        buf[0] = 0; // indicate that this is a list of files
+        buf[0] = Protocol.LISTOFFILES; // indicate that this is a list of files
         int filePointer = 1;
         for (String fileName : fileNames) {
             byte[] fileNameBytes = fileName.getBytes();
@@ -142,138 +202,7 @@ public class ServerThread extends Thread {
 
     }
 
-    private void processAcknowledgement(DatagramPacket packet) {
-        byte[] data = packet.getData();
-        byte identifier = data[1];
-        byte[] pktNum = Arrays.copyOfRange(packet.getData(), 2, 6);
-        int pktNumber = ByteBuffer.wrap(pktNum).getInt();
-        print("Acknowledgement received. Packet#: " + pktNumber + " Identifier: " + identifier);
-        Upload upload = uploads.get(identifier);
-        upload.pktTransfered(pktNumber);
-        if (upload.isComplete()) {
-            print("Upload completed!");
-            uploads.remove(identifier);
-        } else {
-            continueUpload(upload);
-        }
-    }
-
-    private void continueUpload(Upload upload) {
-        byte[] dataToSend = upload.getPacketData(upload.completeUntill());
-        Destination destination = upload.getDestination();
-        DatagramPacket packet = new DatagramPacket(dataToSend, dataToSend.length, destination.getAddress(), destination.getPort());
-        try {
-            socket.send(packet);
-            print("Packet send: " + upload.completeUntill());
-        } catch (IOException e) {
-            print(e.getMessage());
-        }
-    }
-
-    private byte[] getFileContents(String fileName) throws FileNotFoundException {
-        print("Start reading file...");
-        File fileToTransmit = new File(fileName);
-        try (FileInputStream fileInputStream = new FileInputStream(fileToTransmit)) {
-            byte[] fileContents = new byte[(int) fileToTransmit.length()];
-            for (int i = 0; i < fileContents.length; i++) {
-                int nextByte = fileInputStream.read();
-                fileContents[i] = (byte) nextByte;
-            }
-            print("Done reading file...");
-            return fileContents;
-        } catch (Exception e) {
-            print(e.getMessage());
-            return new byte[0];
-        }
-
-    }
-
-    private byte[] getFileContentsFast(String fileName) {
-        print("Start reading file...");
-
-        try {
-            try (FileChannel channel = new FileInputStream(fileName).getChannel()) {
-                MappedByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
-                channel.close();
-                byte[] data = new byte[buffer.remaining()];
-                buffer.get(data);
-                return data;
-            }
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return new byte[0];
-    }
-
-    private byte[] createInitialPacketContent(int numOfPkts, int fileSize, String fileName, Destination destination, byte[] data) {
-        Map<Integer, byte[]> arrays = new HashMap<>();
-        byte[] first = new byte[1];
-        first[0] = 1;
-        arrays.put(0, first); // indicate that this is the initial packet for requested download
-        arrays.put(1, Tools.intToByteArray(numOfPkts)); // total number of packets
-        arrays.put(2, Tools.intToByteArray(fileSize)); // file size
-        byte[] identifierByte = new byte[1];
-        byte identifier = getIdentifierForUpload();
-        identifierByte[0] = identifier;
-        arrays.put(3, identifierByte); // identifier
-        byte[] fileLengthIndicator = new byte[1];
-        fileLengthIndicator[0] = (byte) fileName.getBytes().length;
-        arrays.put(4, fileLengthIndicator);
-        arrays.put(5, fileName.getBytes()); // fileName
-
-        Upload upload = new Upload(destination, data);
-        upload.setParameters(fileName, numOfPkts, fileSize, identifier, packetLength);
-        uploads.put(identifier, upload);
-
-        return Tools.appendThisMapToAnArray(arrays);
-    }
-
-    private byte getIdentifierForDownload() {
-        boolean loop = true;
-        byte b = 0;
-        if (downloads.size() > 1) {
-            while (loop) {
-                if (downloads.containsKey(b)) {
-                    b++;
-                } else {
-                    loop = false;
-                }
-            }
-        }
-        return b;
-    }
-
-    private byte getIdentifierForUpload() {
-        boolean loop = true;
-        byte b = 0;
-        if (uploads.size() > 1) {
-            while (loop) {
-                if (uploads.containsKey(b)) {
-                    b++;
-                } else {
-                    loop = false;
-                }
-            }
-        }
-        return b;
-    }
-
-
-    private byte[] createChecksum() {
-        return null;
-    }
-
-    private HashSet<String> getFilenames() {
-        File folder = new File(System.getProperty("user.dir"));
-        File[] listOfFiles = folder.listFiles();
-        HashSet<String> set = new HashSet<>();
-        for (int i = 0; i < listOfFiles.length; i++) {
-            if (listOfFiles[i].isFile()) {
-                set.add(listOfFiles[i].getName());
-            }
-        }
-        return set;
+    private void print(String msg) {
+        System.out.println(msg);
     }
 }

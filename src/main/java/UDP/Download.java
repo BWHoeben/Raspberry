@@ -1,11 +1,11 @@
 package UDP;
 
 import Tools.Tools;
+import com.sun.org.apache.xpath.internal.operations.String;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -13,36 +13,55 @@ public class Download extends FileTransfer {
 
     private Map<Integer, byte[]> dataMap = new HashMap<>();
     private File file;
-    private FileOutputStream fileStream;
+    private DataOutputStream dataOutputStream;
     private DownloadThread dt;
     private int writtenUntil = 0;
+    private long time;
+    private int doubles;
 
     public Download() {
-
+        time = System.nanoTime();
     }
 
     public void addData(int pktNum, byte[] data) {
-        dataMap.put(pktNum, data);
-        if (!isComplete) {
-           if (!dt.isAlive()) {
-                dt = new DownloadThread(dataMap, file, fileStream, this);
+        if (!dataMap.containsKey(pktNum)) {
+            dataMap.put(pktNum, data);
+            if (!isComplete) {
+                if (!dt.isAlive()) {
+                    dt = new DownloadThread(dataMap, file, dataOutputStream, this);
+                    dt.start();
+                }
+            } else {
+                while (dt.isAlive()) {
+                    try {
+                        Thread.sleep(10);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+                dt = new DownloadThread(dataMap, file, dataOutputStream, this);
                 dt.start();
-            }
-        } else {
-            while (dt.isAlive()) {
                 try {
-                    Thread.sleep(10);
+                    dt.join();
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
+
+                try {
+                    dataOutputStream.flush();
+                    dataOutputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                double elapsedTime = (double) System.nanoTime() - (double) time;
+                double timeInSec = elapsedTime / 1000000000.0;
+                System.out.println("Time elapsed: " + timeInSec + " seconds");
+                double speed = ((double) fileSize / 250000.0 ) / timeInSec;
+                System.out.println("Average speed: " + speed + " Mbps");
+                System.out.println("Redundant transmissions: " + doubles);
             }
-            dt = new DownloadThread(dataMap, file, fileStream, this);
-            dt.start();
-            try {
-                dt.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+        } else{
+            doubles++;
         }
     }
 
@@ -52,59 +71,31 @@ public class Download extends FileTransfer {
 
     public void updateWrittenUntil(int writtenUntil) {
         this.writtenUntil = writtenUntil;
+        removeProcessedDataFromMemory(writtenUntil);
+    }
+
+    public void removeProcessedDataFromMemory(int until) {
+        int i = 0;
+        while (i <= until) {
+            dataMap.remove(i);
+            i++;
+        }
     }
 
     public void initializeWrite() {
-       dataMap.put(0, new byte[0]);
-       file = new File(fileName);
+        dataMap.put(0, new byte[0]);
+        file = new File(fileName);
         try {
-            fileStream = new FileOutputStream(file);
-        } catch (FileNotFoundException e) {
-            System.out.println(e.getMessage());
-        }
-         dt = new DownloadThread(dataMap, file, fileStream, this);
-    }
-
-    /*
-    public void updateWrite() {
-        while (completeUntill() > writtenUntil) {
-            byte[] dataToAdd = dataMap.get(writtenUntil);
-            System.out.println("Written untill: " + writtenUntil);
-            System.out.println("Complete untill: " + completeUntill());
-            for (byte fileContent : dataToAdd) {
-                try {
-                    fileStream.write(fileContent);
-                } catch (IOException e) {
-                    System.out.println(e.getMessage());
-                }
-            }
-            writtenUntil++;
-        }
-    }
-
-    public byte[] getData() {
-        if (isComplete) {
-            return Tools.appendThisMapToAnArray(dataMap);
-        } else {
-            System.out.println("Download is not yet complete. Not writing to file!");
-            return null;
-        }
-    }
-
-    public void writeArrayToFile() {
-        System.out.println("Assembling data...");
-        byte[] data = getData();
-
-        System.out.println("File size: " + data.length + " bytes.");
-
-        File fileToWrite = new File(fileName);
-        try (FileOutputStream fileStream = new FileOutputStream(fileToWrite)) {
-            for (byte fileContent : data) {
-                fileStream.write(fileContent);
+            try {
+                dataOutputStream = new DataOutputStream(
+                        new BufferedOutputStream(
+                                Files.newOutputStream(Paths.get(fileName))));
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
-    }*/
-
+        dt = new DownloadThread(dataMap, file, dataOutputStream, this);
+    }
 }
