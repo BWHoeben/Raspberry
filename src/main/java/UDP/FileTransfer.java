@@ -50,8 +50,4 @@ public abstract class FileTransfer {
             isComplete = true;
         }
     }
-
-    public byte getIdentifier() {
-        return identifier;
-    }
 }

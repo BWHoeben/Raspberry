@@ -1,5 +1,6 @@
 package UDP;
 
+import Tools.Protocol;
 import Tools.Tools;
 
 import java.io.IOException;
@@ -56,7 +57,7 @@ public class Upload extends FileTransfer {
     public byte[] getPacketData(int packetNumber) {
         Map<Integer, byte[]> arrays = new HashMap<>();
         byte[] first = new byte[1];
-        first[0] = 2; // indicate that this is a packet for requested download
+        first[0] = Protocol.ADDUP; // indicate that this is a packet for requested download
         arrays.put(0, first);
         byte[] ind = new byte[1];
         ind[0] = this.identifier;
@@ -128,6 +129,7 @@ public class Upload extends FileTransfer {
     public void cancelTimerForPacket(int packetNumber) {
         Timer timer = timers[packetNumber];
         timer.cancel();
+        timer.purge();
         timers[packetNumber] = null;
     }
 
@@ -149,6 +151,16 @@ public class Upload extends FileTransfer {
 
     private void print(String msg) {
         System.out.println(msg);
+    }
+
+    public void cancelAllTimers() {
+        for (int i = 0; i < numberOfPkts; i++) {
+            Timer timer = timers[i];
+            if (timer != null) {
+                timer.cancel();
+                timer.purge();
+            }
+        }
     }
 
 }

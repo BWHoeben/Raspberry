@@ -35,14 +35,6 @@ public class Tools {
         return packetLength;
     }
 
-    public static int getSlidingWindow() {
-        return slidingWindow;
-    }
-
-    public static int getTimeOut() {
-        return timeOut;
-    }
-
     private static int getNumberOfPackets(int fileSize) {
         return (int) Math.ceil((double) fileSize / (packetLength - 10)) + 1;
     }
@@ -111,7 +103,7 @@ public class Tools {
         int numOfPkts = getNumberOfPackets(fileSize);
         Map<Integer, byte[]> arrays = new HashMap<>();
         byte[] first = new byte[1];
-        first[0] = 1;
+        first[0] = Protocol.INITUP;
         arrays.put(0, first); // indicate that this is the initial packet for requested download
         arrays.put(1, Tools.intToByteArray(numOfPkts)); // total number of packets
         arrays.put(2, Tools.intToByteArray(fileSize)); // file size
@@ -171,7 +163,7 @@ public class Tools {
     private static void sendAcknowledgement(InetAddress address, int port, int pktNumber, byte identifier, DatagramSocket socket) {
         Map<Integer, byte[]> arrays = new HashMap<>();
         byte[] first = new byte[1];
-        first[0] = 3;
+        first[0] = Protocol.ACKDOWN;
         arrays.put(0, first); // indicate that this is an acknowledgement
         byte[] identifierByte = new byte[1];
         identifierByte[0] = identifier;
@@ -222,6 +214,7 @@ public class Tools {
         upload.pktTransfered(pktNumber);
         upload.acknowledgePacket(pktNumber);
         if (upload.isComplete()) {
+            upload.cancelAllTimers();
             print("Upload completed!");
             print("Time outs: " + upload.getTimeOuts());
             uploads.remove(identifier);

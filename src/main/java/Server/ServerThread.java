@@ -1,5 +1,6 @@
 package Server;
 
+import Tools.Protocol;
 import Tools.Tools;
 import UDP.*;
 
@@ -57,35 +58,45 @@ public class ServerThread extends Thread {
         byte[] dataFromClient = packet.getData();
         byte firstByte = dataFromClient[0];
         switch (firstByte) {
-            case 0:
-                print("Client wants to upload.");
-                Tools.handleInitialPacket(packet, downloads, socket);
-                break;
-            case 1:
+            case Protocol.SHOWFILES:
                 print("Client requested list of files.");
                 listFiles(packet, socket);
                 break;
-            case 2:
+            case Protocol.INITUP:
+                print("Client wants to upload.");
+                Tools.handleInitialPacket(packet, downloads, socket);
+                break;
+            case Protocol.REQDOWN:
                 startUpload(packet);
                 break;
-            case 3:
+            case Protocol.ADDUP:
+                downloadPacket(packet);
+                break;
+            case Protocol.ACKDOWN:
                 Tools.processAcknowledgement(packet, uploads);
                 break;
-            case 4:
+            case Protocol.PAUSE:
                 print("Client wants to pauze file transfer.");
                 pauseTransfer(packet);
                 break;
-            case 5:
+            case Protocol.RESUME:
                 print("Client wants to resume file transfer.");
                 resumeTransfer(packet);
                 break;
-            case 6:
+            case Protocol.ABORT:
                 print("Client wants to abort file transfer.");
                 abortTransfer(packet);
                 break;
             default:
                 print("Received message does not adhere to protocol. Discarding message.");
                 break;
+        }
+    }
+
+    private void downloadPacket(DatagramPacket packet) {
+        boolean downloadComplete = Tools.processDownloadPacket(packet, downloads, socket);
+        if (downloadComplete) {
+            print("Download complete");
         }
     }
 
@@ -132,11 +143,20 @@ public class ServerThread extends Thread {
             }
         } catch (IOException e) {
             print("File could not be read!");
-            // todo
+            sendInvalidReq(packet, filenameBytes, filenameLengthIndicator);
         }
     }
 
-   private byte getIdentifierForDownload() {
+    private void sendInvalidReq(DatagramPacket packet, byte[] filename, int fileLengthIndicator) {
+        byte[] packetToSend = new byte[Tools.getPacketLength()];
+        packetToSend[0] = Protocol.INVALIDREQ;
+        packetToSend[1] = (byte) fileLengthIndicator;
+        for (int i = 0; i < fileLengthIndicator; i++) {
+            packetToSend[2 + i] = filename[i];
+        }
+    }
+
+    private byte getIdentifierForDownload() {
         boolean loop = true;
         byte b = 0;
         if (downloads.size() > 1) {
@@ -162,7 +182,7 @@ public class ServerThread extends Thread {
             bytesNeeded = bytesNeeded + 1 + fileName.getBytes().length;
         }
         byte[] buf = new byte[bytesNeeded];
-        buf[0] = 0; // indicate that this is a list of files
+        buf[0] = Protocol.LISTOFFILES; // indicate that this is a list of files
         int filePointer = 1;
         for (String fileName : fileNames) {
             byte[] fileNameBytes = fileName.getBytes();

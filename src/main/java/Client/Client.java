@@ -1,5 +1,6 @@
 package Client;
 
+import Tools.Protocol;
 import Tools.Tools;
 import UDP.Destination;
 import UDP.Download;
@@ -47,12 +48,12 @@ public class Client {
 
     private void startUpload(Destination destination, byte[] fileContent, String filename) {
         print("Uploading: " + filename);
-        byte[] packetContent = Tools.createInitialPacketContentForUpload(filename, destination, fileContent, socket, uploads);
-        DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, destination.getAddress(), destination.getPort());
         try {
             if (socket == null) {
                 socket = new DatagramSocket();
             }
+            byte[] packetContent = Tools.createInitialPacketContentForUpload(filename, destination, fileContent, socket, uploads);
+            DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, destination.getAddress(), destination.getPort());
             socket.send(initialPacket);
             listenForPackets(socket);
         } catch (IOException e) {
@@ -86,26 +87,40 @@ public class Client {
         byte[] data = packet.getData();
         byte ind = data[0];
         switch (ind) {
-            case 0:
+            case Protocol.LISTOFFILES:
                 print("Server send list of files:");
                 processList(data, packet.getAddress());
                 break;
-            case 1:
+            case Protocol.INVALIDREQ:
+                invalidReq(data, packet);
+                break;
+            case Protocol.INITUP:
                 print("Server send initial packet for requested download");
                 Tools.handleInitialPacket(packet, downloads, socket);
                 break;
-            case 2:
+            case Protocol.ADDUP:
                 downloadPacket(packet);
                 break;
-            case 3:
+            case Protocol.ACKDOWN:
                 print("Server send acknowledgement for upload");
                 Tools.processAcknowledgement(packet, uploads);
                 break;
             default:
-                print("Unknown message received by server");
+                print("Unknown message received by server. First byte is: " + data[0]);
                 break;
 
         }
+    }
+
+    private void invalidReq(byte[] data, DatagramPacket packet) {
+        int filenamelength = data[1];
+        byte[] filenameBytes = new byte[filenamelength];
+        for (int i = 0; i < filenamelength; i++) {
+            filenameBytes[i] = data[2 + i];
+        }
+        String fileName = new String(filenameBytes);
+        print("Server was not able to retrieve file: " + fileName);
+        askForTerminate(packet.getAddress());
     }
 
     private void downloadPacket(DatagramPacket packet) {
@@ -207,10 +222,10 @@ public class Client {
         byte[] buf = new byte[Tools.getPacketLength()];
 
         if (filename.isEmpty()) {
-            buf[0] = 1;
+            buf[0] = Protocol.SHOWFILES;
             buf[1] = 0;
         } else {
-            buf[0] = 2;
+            buf[0] = Protocol.REQDOWN;
             byte[] filenameArray = filename.getBytes();
             buf[1] = (byte) filenameArray.length;
             for (int i = 0; i < filenameArray.length; i++) {

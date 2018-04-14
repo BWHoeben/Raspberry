@@ -53,10 +53,10 @@ public class Download extends FileTransfer {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
-                long elapsedTime = System.nanoTime() - time;
-                double timeInSec = elapsedTime / 1000000000;
+                double elapsedTime = (double) System.nanoTime() - (double) time;
+                double timeInSec = elapsedTime / 1000000000.0;
                 System.out.println("Time elapsed: " + timeInSec + " seconds");
-                double speed = (fileSize / 250000 ) / timeInSec;
+                double speed = ((double) fileSize / 250000.0 ) / timeInSec;
                 System.out.println("Average speed: " + speed + " Mbps");
                 System.out.println("Redundant transmissions: " + doubles);
             }
