@@ -17,43 +17,51 @@ public class Download extends FileTransfer {
     private DownloadThread dt;
     private int writtenUntil = 0;
     private long time;
+    private int doubles;
 
     public Download() {
         time = System.nanoTime();
     }
 
     public void addData(int pktNum, byte[] data) {
-        dataMap.put(pktNum, data);
-        if (!isComplete) {
-           if (!dt.isAlive()) {
+        if (!dataMap.containsKey(pktNum)) {
+            dataMap.put(pktNum, data);
+            if (!isComplete) {
+                if (!dt.isAlive()) {
+                    dt = new DownloadThread(dataMap, file, dataOutputStream, this);
+                    dt.start();
+                }
+            } else {
+                while (dt.isAlive()) {
+                    try {
+                        Thread.sleep(10);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
                 dt = new DownloadThread(dataMap, file, dataOutputStream, this);
                 dt.start();
-            }
-        } else {
-            while (dt.isAlive()) {
                 try {
-                    Thread.sleep(10);
+                    dt.join();
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-            }
-            dt = new DownloadThread(dataMap, file, dataOutputStream, this);
-            dt.start();
-            try {
-                dt.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
 
-            try {
-                dataOutputStream.flush();
-                dataOutputStream.close();
-            } catch (IOException e) {
-                e.printStackTrace();
+                try {
+                    dataOutputStream.flush();
+                    dataOutputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                long elapsedTime = System.nanoTime() - time;
+                double timeInSec = elapsedTime / 1000000000;
+                System.out.println("Time elapsed: " + timeInSec + " seconds");
+                double speed = (fileSize / 250000 ) / timeInSec;
+                System.out.println("Average speed: " + speed + " Mbps");
+                System.out.println("Redundant transmissions: " + doubles);
             }
-            long elapsedTime = System.nanoTime() - time;
-            long timeInSec = elapsedTime / 1000000000;
-            System.out.println("Time elapsed: " + timeInSec + " seconds");
+        } else{
+            doubles++;
         }
     }
 
@@ -75,19 +83,19 @@ public class Download extends FileTransfer {
     }
 
     public void initializeWrite() {
-       dataMap.put(0, new byte[0]);
-       file = new File(fileName);
+        dataMap.put(0, new byte[0]);
+        file = new File(fileName);
         try {
             try {
                 dataOutputStream = new DataOutputStream(
                         new BufferedOutputStream(
-                                Files.newOutputStream(Paths.get(fileName)))) ;
+                                Files.newOutputStream(Paths.get(fileName))));
             } catch (IOException e) {
                 e.printStackTrace();
             }
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
-         dt = new DownloadThread(dataMap, file, dataOutputStream, this);
+        dt = new DownloadThread(dataMap, file, dataOutputStream, this);
     }
 }

@@ -25,18 +25,20 @@ public class DownloadThread extends Thread {
 
     @Override
     public void run() {
-        int writtenUntill = download.getWrittenUntil();
-        while (download.completeUntill() > writtenUntill) {
-            byte[] array = dataMap.get(writtenUntill);
-            for (byte fileContent : array) {
-                try {
-                    dataOutputStream.write(fileContent);
-                } catch (IOException e) {
-                    e.printStackTrace();
+            int writtenUntill = download.getWrittenUntil();
+            while (download.completeUntill() > writtenUntill) {
+                byte[] array = dataMap.get(writtenUntill);
+                if (array != null) {
+                    for (byte fileContent : array) {
+                        try {
+                            dataOutputStream.write(fileContent);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
                 }
+                writtenUntill++;
             }
-            writtenUntill++;
-        }
-        download.updateWrittenUntil(writtenUntill);
+            download.updateWrittenUntil(writtenUntill);
     }
 }

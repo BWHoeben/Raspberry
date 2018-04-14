@@ -1,21 +1,19 @@
 package Client;
 
 import Tools.Tools;
+import UDP.Destination;
 import UDP.Download;
 import UDP.Upload;
 
 import java.io.*;
 import java.net.*;
-import java.nio.ByteBuffer;
 import java.util.*;
 
 public class Client {
-    private int packetLength = 2048 * 8;
-    private Map<Integer, byte[]> data = new HashMap<>();
     private DatagramSocket socket = null;
     private Scanner scanner = new Scanner(System.in);
-    private Map<Byte, Download> downloads = new HashMap<>();
-    private Map<Byte, Upload> uploads = new HashMap<>();
+    private HashMap<Byte, Download> downloads = new HashMap<>();
+    private HashMap<Byte, Upload> uploads = new HashMap<>();
     private boolean listen = false;
 
     public static void main(String[] args) {
@@ -28,60 +26,51 @@ public class Client {
         upOrDown(address);
     }
 
-    private void handleInitialPacket(DatagramPacket packet) {
-        byte[] data = packet.getData();
-        Download download = new Download();
-        byte[] numOfPkts = Arrays.copyOfRange(data, 1, 5);
-        int totalPkts = ByteBuffer.wrap(numOfPkts).getInt();
-        print("Total number of packets: " + totalPkts);
-        byte[] fileSize = Arrays.copyOfRange(data, 5, 9);
-        int fs = ByteBuffer.wrap(fileSize).getInt();
-        print("File size: " + fs + " bytes");
-        byte identifier = data[9];
-        print("Identifier: " + identifier);
-        int fileLengthIndicator = (int) data[10];
-        byte[] fileName = Arrays.copyOfRange(data, 11, 11 + fileLengthIndicator);
-        print("File name: " + new String(fileName));
-        download.setParameters(new String(fileName), totalPkts, fs, identifier, packetLength);
-        download.initializeWrite();
-        download.pktTransfered(0);
-        downloads.put(identifier, download);
-        sendAcknowledgement(packet.getAddress(), packet.getPort(), 0, (byte) identifier);
+    private void upload(Destination destination) {
+        while (true) {
+            print("Enter the name of the file you want to upload or press the return key to list available files.");
+            String answer = scanner.nextLine();
+            if (answer.isEmpty()) {
+                print("Listing files...");
+                listFiles();
+            } else {
+                try {
+                    byte[] fileContent = Tools.getFileContents(answer);
+                    startUpload(destination, fileContent, answer);
+                    break;
+                } catch (IOException e) {
+                    print("File could not be read. Try again.");
+                }
+            }
+        }
     }
 
-    private void sendAcknowledgement(InetAddress address, int port, int pktNumber, byte identifier) {
-        Map<Integer, byte[]> arrays = new HashMap<>();
-        byte[] first = new byte[1];
-        first[0] = 3;
-        arrays.put(0, first); // indicate that this is an acknowledgement
-        byte[] identifierByte = new byte[1];
-        identifierByte[0] = identifier;
-        arrays.put(1, identifierByte); // identifier
-        arrays.put(2, Tools.intToByteArray(pktNumber)); // pktNumber
-        byte[] ack = Tools.appendThisMapToAnArray(arrays);
-        DatagramPacket pkt = new DatagramPacket(ack, ack.length, address, port);
+    private void startUpload(Destination destination, byte[] fileContent, String filename) {
+        print("Uploading: " + filename);
+        byte[] packetContent = Tools.createInitialPacketContentForUpload(filename, destination, fileContent, socket, uploads);
+        DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, destination.getAddress(), destination.getPort());
         try {
-            socket.send(pkt);
+            if (socket == null) {
+                socket = new DatagramSocket();
+            }
+            socket.send(initialPacket);
+            listenForPackets(socket);
         } catch (IOException e) {
             print(e.getMessage());
         }
     }
 
-    private void upload(InetAddress address) {
-        byte[] buf = new byte[packetLength];
-        //buf[0] = (byte) 1;
-        DatagramPacket packet = new DatagramPacket(buf, buf.length, address, 12555);
-        try {
-            socket.send(packet);
-        } catch (IOException e) {
-            print(e.getMessage());
+    private void listFiles() {
+        HashSet<String> fileNames = Tools.getFilenames();
+        for (String filename : fileNames) {
+            print(filename);
         }
     }
 
-    private void listenForPackets(InetAddress address, int port, DatagramSocket socket) {
+    private void listenForPackets(DatagramSocket socket) {
         print("Listening for incoming packets");
         listen = true;
-        byte[] buf = new byte[packetLength];
+        byte[] buf = new byte[Tools.getPacketLength()];
         while (listen) {
             DatagramPacket packet = new DatagramPacket(buf, buf.length);
             try {
@@ -103,14 +92,14 @@ public class Client {
                 break;
             case 1:
                 print("Server send initial packet for requested download");
-                handleInitialPacket(packet);
+                Tools.handleInitialPacket(packet, downloads, socket);
                 break;
             case 2:
-                processDownloadPacket(packet);
+                downloadPacket(packet);
                 break;
             case 3:
                 print("Server send acknowledgement for upload");
-                //Todo
+                Tools.processAcknowledgement(packet, uploads);
                 break;
             default:
                 print("Unknown message received by server");
@@ -119,25 +108,31 @@ public class Client {
         }
     }
 
-    private void processDownloadPacket(DatagramPacket packet) {
-        byte[] data = packet.getData();
-        byte identifier = data[1];
-        Download download = downloads.get(identifier);
-        byte[] pktNum = Arrays.copyOfRange(data, 2, 6);
-        int pktNumber = ByteBuffer.wrap(pktNum).getInt();
-        print("Server send packet " + pktNumber +  " for download " + identifier + " with size: " + packet.getData().length);
-        sendAcknowledgement(packet.getAddress(), packet.getPort(), pktNumber, identifier);
-        download.pktTransfered(pktNumber);
-        byte[] dataLen = Arrays.copyOfRange(data, 6, 10);
-        int dataLength = ByteBuffer.wrap(dataLen).getInt();
-        byte[] receivedData = Arrays.copyOfRange(data, 10, 10 + dataLength);
-        download.addData(pktNumber, receivedData);
-        if (download.isComplete()) {
-            downloads.remove(identifier);
+    private void downloadPacket(DatagramPacket packet) {
+        boolean downloadComplete = Tools.processDownloadPacket(packet, downloads, socket);
+        if (downloadComplete) {
             if (downloads.size() + uploads.size() == 0) {
                 listen = false;
             }
-            print("Download complete!");
+            print("Download complete");
+            askForTerminate(packet.getAddress());
+        }
+    }
+
+    private void askForTerminate(InetAddress address) {
+        print("Terminate connection? (yes/no)");
+        String answer = scanner.nextLine();
+        while (true) {
+            if (answer.equalsIgnoreCase("yes")) {
+                print("Disconnecting...");
+                break;
+            } else if (answer.equalsIgnoreCase("no")) {
+                upOrDown(address);
+                break;
+            } else {
+                print("Unknown answer, please provide 'yes' or 'no'.");
+                print("Terminate connection? (yes/no)");
+            }
         }
     }
 
@@ -183,7 +178,8 @@ public class Client {
             print("Download or upload? (u/d)");
             String answer = scanner.nextLine();
             if (answer.equalsIgnoreCase("u")) {
-                upload(address);
+                Destination destination = new Destination(Tools.getPort(), address);
+                upload(destination);
                 break;
             } else if (answer.equalsIgnoreCase("d")) {
                 print("Please provide the name of the file you want to download or press the return key to get a list of available files...");
@@ -208,7 +204,7 @@ public class Client {
         } catch (SocketException e) {
             print(e.getMessage());
         }
-        byte[] buf = new byte[packetLength];
+        byte[] buf = new byte[Tools.getPacketLength()];
 
         if (filename.isEmpty()) {
             buf[0] = 1;
@@ -222,12 +218,12 @@ public class Client {
             }
         }
         try {
-            DatagramPacket packet = new DatagramPacket(buf, buf.length, address, 12555);
+            DatagramPacket packet = new DatagramPacket(buf, buf.length, address, Tools.getPort());
             socket.send(packet);
         } catch (IOException e) {
             print(e.getMessage());
         }
-        listenForPackets(address, 12555, socket);
+        listenForPackets(socket);
     }
 
     private InetAddress askForHost() {
