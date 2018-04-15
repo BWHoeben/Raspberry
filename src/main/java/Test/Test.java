@@ -1,21 +1,31 @@
 package Test;
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 
 public class Test {
 
     public static void main(String[] args) {
-        File folder = new File(System.getProperty("user.dir"));
-        File[] listOfFiles = folder.listFiles();
 
-        for (int i = 0; i < listOfFiles.length; i++) {
-            if (listOfFiles[i].isFile()) {
-                System.out.println("File " + listOfFiles[i].getName());
-            //} else if (listOfFiles[i].isDirectory()) {
-            //    System.out.println("Directory " + listOfFiles[i].getName());
+        try (FileChannel channel = new FileInputStream("picture1.bmp").getChannel()) {
+            MappedByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
+        int i = 0;
+        int j = 100000000;
+            while (i < 10) {
+                byte[] data;
+                if (buffer.remaining() > j) {
+                    data = new byte[j];
+                } else {
+                    data = new byte[buffer.remaining()];
+                }
+                buffer.get(data);
+                System.out.println(data.length);
+                i++;
             }
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-        }
+    }
 }

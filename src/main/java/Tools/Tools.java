@@ -18,9 +18,9 @@ import java.util.Map;
 
 public class Tools {
 
-    private static int packetLength = 2048 * 8;
-    private static int slidingWindow = 50;
-    private static int timeOut = 400;
+    private static int packetLength = 65000;
+    private static int slidingWindow = 25;
+    private static int timeOut = 1000;
     private static int port = 12555;
 
     private Tools() {
@@ -33,10 +33,6 @@ public class Tools {
 
     public static int getPacketLength() {
         return packetLength;
-    }
-
-    private static int getNumberOfPackets(int fileSize) {
-        return (int) Math.ceil((double) fileSize / (packetLength - 10)) + 1;
     }
 
     public static byte[] intToByteArray (final int integer) {
@@ -75,7 +71,9 @@ public class Tools {
     }
 
     public static HashSet<String> getFilenames() {
-        File folder = new File(System.getProperty("user.dir"));
+        // use this on one pi
+        //in = new BufferedReader(new FileReader("/home/pi/test.txt"));
+        File folder = new File(System.getProperty("user.dir") + "/home/pi/");
         File[] listOfFiles = folder.listFiles();
         HashSet<String> set = new HashSet<>();
         for (int i = 0; i < listOfFiles.length; i++) {
@@ -85,22 +83,34 @@ public class Tools {
         }
         return set;
     }
-
+/*
     public static byte[] getFileContents(String fileName) throws IOException {
         print("Start reading file...");
-            try (FileChannel channel = new FileInputStream(fileName).getChannel()) {
+            try (FileChannel channel = new FileInputStream("/home/pi/" + fileName).getChannel()) {
                 MappedByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
                 byte[] data = new byte[buffer.remaining()];
                 buffer.get(data);
                 return data;
             }
     }
+*/
+
 
     public static byte[] createInitialPacketContentForUpload(String fileName, Destination destination,
-                                                             byte[] data, DatagramSocket socket,
+                                                              DatagramSocket socket,
                                                              Map<Byte, Upload> uploads) {
-        int fileSize = data.length;
-        int numOfPkts = getNumberOfPackets(fileSize);
+        Upload upload = new Upload(destination);
+        byte identifier = getIdentifierForUpload(uploads);
+
+        upload.initializeFileRead(fileName);
+        upload.setParameters(fileName, identifier, packetLength);
+
+        uploads.put(identifier, upload);
+        upload.initialize(socket, slidingWindow, timeOut);
+
+
+        int fileSize = upload.getFileSize();
+        int numOfPkts = upload.getNumberOfPkts();
         Map<Integer, byte[]> arrays = new HashMap<>();
         byte[] first = new byte[1];
         first[0] = Protocol.INITUP;
@@ -108,7 +118,6 @@ public class Tools {
         arrays.put(1, Tools.intToByteArray(numOfPkts)); // total number of packets
         arrays.put(2, Tools.intToByteArray(fileSize)); // file size
         byte[] identifierByte = new byte[1];
-        byte identifier = getIdentifierForUpload(uploads);
         identifierByte[0] = identifier;
         arrays.put(3, identifierByte); // identifier
         byte[] fileLengthIndicator = new byte[1];
@@ -116,10 +125,7 @@ public class Tools {
         arrays.put(4, fileLengthIndicator);
         arrays.put(5, fileName.getBytes()); // fileName
 
-        Upload upload = new Upload(destination, data);
-        upload.setParameters(fileName, numOfPkts, fileSize, identifier, packetLength);
-        uploads.put(identifier, upload);
-        upload.initialize(socket, slidingWindow, timeOut);
+
         return Tools.appendThisMapToAnArray(arrays);
     }
 
@@ -152,7 +158,8 @@ public class Tools {
         int fileLengthIndicator = (int) data[10];
         byte[] fileName = Arrays.copyOfRange(data, 11, 11 + fileLengthIndicator);
         print("File name: " + new String(fileName));
-        download.setParameters(new String(fileName), totalPkts, fs, identifier, Tools.getPacketLength());
+        download.setNumOfTotalPkts(totalPkts);
+        download.setParameters(new String(fileName), identifier, Tools.getPacketLength(), fs);
         download.initializeWrite();
         download.pktTransfered(0);
         downloads.put(identifier, download);
@@ -184,20 +191,24 @@ public class Tools {
         Download download = downloads.get(identifier);
         byte[] pktNum = Arrays.copyOfRange(data, 2, 6);
         int pktNumber = ByteBuffer.wrap(pktNum).getInt();
-        //print("Server send packet " + pktNumber +  " for download " + identifier + " with size: " + packet.getData().length);
         Tools.sendAcknowledgement(packet.getAddress(), packet.getPort(), pktNumber, identifier, socket);
-        download.pktTransfered(pktNumber);
-        byte[] dataLen = Arrays.copyOfRange(data, 6, 10);
-        int dataLength = ByteBuffer.wrap(dataLen).getInt();
-        byte[] receivedData = Arrays.copyOfRange(data, 10, 10 + dataLength);
-        download.addData(pktNumber, receivedData);
+        if (download != null) {
+            //print("Server send packet " + pktNumber +  " for download " + identifier + " with size: " + packet.getData().length);
+            download.pktTransfered(pktNumber);
+            byte[] dataLen = Arrays.copyOfRange(data, 6, 10);
+            int dataLength = ByteBuffer.wrap(dataLen).getInt();
+            byte[] receivedData = Arrays.copyOfRange(data, 10, 10 + dataLength);
+            download.addData(pktNumber, receivedData);
 
-        // This method returns true if download is complete
-        if (download.isComplete()) {
-            downloads.remove(identifier);
-            return true;
+            // This method returns true if download is complete
+            if (download.isComplete()) {
+                downloads.remove(identifier);
+                return true;
+            } else {
+                return false;
+            }
         } else {
-            return false;
+            return true;
         }
     }
 
@@ -207,7 +218,7 @@ public class Tools {
         byte[] pktNum = Arrays.copyOfRange(packet.getData(), 2, 6);
         int pktNumber = ByteBuffer.wrap(pktNum).getInt();
         Upload upload = uploads.get(identifier);
-        if (pktNumber != 0) {
+        if (pktNumber != 0 && upload != null) {
             upload.cancelTimerForPacket(pktNumber);
         }
         //print("Acknowledgement received. Packet#: " + pktNumber + " Identifier: " + identifier);

@@ -3,15 +3,19 @@ package UDP;
 import Tools.Protocol;
 import Tools.Tools;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.*;
 
 public class Upload extends FileTransfer {
 
     private Destination destination;
-    private byte[] data;
     private PacketState[] states;
     private DatagramSocket socket;
     private int slidingWindow;
@@ -20,10 +24,13 @@ public class Upload extends FileTransfer {
     private boolean paused = false;
     private boolean aborted = false;
     private int timeOuts = 0;
+    private MappedByteBuffer buffer;
+    private Map<Integer, byte[]> dataMap = new HashMap<>();
+    private int readUntill = 0;
 
-    public Upload(Destination destination, byte[] data) {
+    public Upload(Destination destination) {
         this.destination = destination;
-        this.data = data;
+        this.packetLength = Tools.getPacketLength();
     }
 
     public void initialize(DatagramSocket socket, int slidingWindow, int timeOut) {
@@ -39,6 +46,7 @@ public class Upload extends FileTransfer {
 
     public void acknowledgePacket(int pktNumber) {
         states[pktNumber] = PacketState.ACKNOWLEDGED;
+        removeAcknowledgedData(pktNumber);
     }
 
     public void pause() {
@@ -54,6 +62,33 @@ public class Upload extends FileTransfer {
         this.aborted = true;
     }
 
+    public void initializeFileRead(String fileName) {
+        //String dir = "/home/pi/" + fileName;
+        String dir = fileName;
+        this.fileSize = (int) new File(dir).length();
+        this.numberOfPkts = (int) Math.ceil((double) fileSize / (packetLength - 10)) + 1;
+        try (FileChannel channel = new FileInputStream(dir).getChannel()) {
+            buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void getPacket(int length) {
+        if (buffer.hasRemaining()) {
+            readUntill++;
+            byte[] data;
+            if (buffer.remaining() > length) {
+                data = new byte[length];
+                buffer.get(data);
+            } else {
+                data = new byte[buffer.remaining()];
+                buffer.get(data);
+            }
+            dataMap.put(readUntill, data);
+        }
+    }
+
     public byte[] getPacketData(int packetNumber) {
         Map<Integer, byte[]> arrays = new HashMap<>();
         byte[] first = new byte[1];
@@ -65,14 +100,27 @@ public class Upload extends FileTransfer {
         arrays.put(2, Tools.intToByteArray(packetNumber)); // the packet number
         byte[] header = Tools.appendThisMapToAnArray(arrays);
         int bytesLeft = packetLength - header.length - 4;
-        int from = bytesLeft * (packetNumber - 1);
-        int to = Math.min(packetNumber * bytesLeft, data.length);
-        from = Math.min(from,to);
-        byte[] dataToSend = Arrays.copyOfRange(data, from, to);
+        byte[] dataToSend;
+        while (!dataMap.containsKey(packetNumber) && readUntill <= packetNumber) {
+            //for (int i = 0; i < slidingWindow; i++) {
+                getPacket(bytesLeft);
+             //}
+        }
+        dataToSend = dataMap.get(packetNumber);
+        if (dataToSend != null) {
         int dataLengthIndicator = dataToSend.length;
         byte[] dataLen = Tools.intToByteArray(dataLengthIndicator);
         header = Tools.appendBytes(header, dataLen);
         return Tools.appendBytes(header, dataToSend);
+        } else {
+            return new byte[0];
+        }
+    }
+
+    public void removeAcknowledgedData(int pktNumber) {
+        if (dataMap.containsKey(pktNumber)) {
+            dataMap.remove(pktNumber);
+        }
     }
 
     public int packetsInTheAir() {
@@ -113,14 +161,16 @@ public class Upload extends FileTransfer {
             for (int i = 0; i < packetsToTransmit.length; i++) {
                 int pktNumber = packetsToTransmit[i];
                 byte[] dataToSend = getPacketData(pktNumber);
-                DatagramPacket packet = new DatagramPacket(dataToSend, dataToSend.length, destination.getAddress(), destination.getPort());
-                try {
-                    socket.send(packet);
-                    setTimerForPacket(pktNumber);
-                    states[pktNumber] = PacketState.SEND;
-                    //print("Packet send: " + pktNumber);
-                } catch (IOException e) {
-                    print(e.getMessage());
+                if (dataToSend.length > 0) {
+                    DatagramPacket packet = new DatagramPacket(dataToSend, dataToSend.length, destination.getAddress(), destination.getPort());
+                    try {
+                        socket.send(packet);
+                        setTimerForPacket(pktNumber);
+                        states[pktNumber] = PacketState.SEND;
+                        print("Packet send: " + pktNumber);
+                    } catch (IOException e) {
+                        print(e.getMessage());
+                    }
                 }
             }
         }
@@ -128,9 +178,11 @@ public class Upload extends FileTransfer {
 
     public void cancelTimerForPacket(int packetNumber) {
         Timer timer = timers[packetNumber];
-        timer.cancel();
-        timer.purge();
-        timers[packetNumber] = null;
+        if (timer != null) {
+            timer.cancel();
+            timer.purge();
+            timers[packetNumber] = null;
+        }
     }
 
     private void setTimerForPacket(int packetNumber) {
@@ -161,6 +213,14 @@ public class Upload extends FileTransfer {
                 timer.purge();
             }
         }
+    }
+
+    public void setParameters(String fileName, byte identifier, int packetLength) {
+        //this.fileName = fileName;
+        this.fileName = "pic.txt";
+        this.identifier = identifier;
+        this.pktsTransfered = new boolean[numberOfPkts];
+        this.packetLength = packetLength;
     }
 
 }

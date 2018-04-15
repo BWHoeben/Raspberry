@@ -35,24 +35,19 @@ public class Client {
                 print("Listing files...");
                 listFiles();
             } else {
-                try {
-                    byte[] fileContent = Tools.getFileContents(answer);
-                    startUpload(destination, fileContent, answer);
-                    break;
-                } catch (IOException e) {
-                    print("File could not be read. Try again.");
-                }
+                startUpload(destination, answer);
+                break;
             }
         }
     }
 
-    private void startUpload(Destination destination, byte[] fileContent, String filename) {
+    private void startUpload(Destination destination, String filename) {
         print("Uploading: " + filename);
         try {
             if (socket == null) {
                 socket = new DatagramSocket();
             }
-            byte[] packetContent = Tools.createInitialPacketContentForUpload(filename, destination, fileContent, socket, uploads);
+            byte[] packetContent = Tools.createInitialPacketContentForUpload(filename, destination, socket, uploads);
             DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, destination.getAddress(), destination.getPort());
             socket.send(initialPacket);
             listenForPackets(socket);
@@ -97,18 +92,66 @@ public class Client {
             case Protocol.INITUP:
                 print("Server send initial packet for requested download");
                 Tools.handleInitialPacket(packet, downloads, socket);
+                //showOptions(packet);
                 break;
             case Protocol.ADDUP:
                 downloadPacket(packet);
                 break;
             case Protocol.ACKDOWN:
-                print("Server send acknowledgement for upload");
+                //print("Server send acknowledgement for upload");
                 Tools.processAcknowledgement(packet, uploads);
                 break;
             default:
                 print("Unknown message received by server. First byte is: " + data[0]);
                 break;
 
+        }
+    }
+
+    private void showOptions(DatagramPacket packet) {
+        byte[] data = packet.getData();
+        byte identifier = data[9];
+        Destination destination = new Destination(packet.getPort(), packet.getAddress());
+        Download download = downloads.get(identifier);
+        while (!download.isComplete()) {
+            print("Enter 'p' to pause download or 'a' to abort.");
+            String answer = scanner.nextLine();
+            if (answer.equalsIgnoreCase("p")) {
+                print("Pausing download...");
+                pause(identifier, destination);
+                break;
+            } else if (answer.equalsIgnoreCase("a")) {
+                print("Aborting download...");
+                abort(identifier, destination);
+                break;
+            } else {
+                print("Unknown input...");
+            }
+        }
+
+    }
+
+    private void pause(byte identifier, Destination destination) {
+        byte[] dataToSend = new byte[2];
+        dataToSend[0] = Protocol.PAUSE;
+        dataToSend[1] = identifier;
+        DatagramPacket packet = new DatagramPacket(dataToSend, dataToSend.length, destination.getAddress(), destination.getPort());
+        try {
+            socket.send(packet);
+        } catch (IOException e) {
+            print(e.getMessage());
+        }
+    }
+
+    private void abort(byte identifier, Destination destination) {
+        byte[] dataToSend = new byte[2];
+        dataToSend[0] = Protocol.ABORT;
+        dataToSend[1] = identifier;
+        DatagramPacket packet = new DatagramPacket(dataToSend, dataToSend.length, destination.getAddress(), destination.getPort());
+        try {
+            socket.send(packet);
+        } catch (IOException e) {
+            print(e.getMessage());
         }
     }
 

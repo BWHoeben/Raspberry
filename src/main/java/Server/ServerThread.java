@@ -131,19 +131,13 @@ public class ServerThread extends Thread {
         }
         String fileName = new String(filenameBytes);
         print("Client requested: " + fileName);
+        Destination destination = new Destination(packet.getPort(), packet.getAddress());
+        byte[] packetContent = Tools.createInitialPacketContentForUpload(fileName, destination, socket, uploads);
+        DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, packet.getAddress(), packet.getPort());
         try {
-            byte[] fileContent = Tools.getFileContents(fileName);
-            Destination destination = new Destination(packet.getPort(), packet.getAddress());
-            byte[] packetContent = Tools.createInitialPacketContentForUpload(fileName, destination, fileContent, socket, uploads);
-            DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, packet.getAddress(), packet.getPort());
-            try {
-                socket.send(initialPacket);
-            } catch (IOException e) {
-                print(e.getMessage());
-            }
+            socket.send(initialPacket);
         } catch (IOException e) {
-            print("File could not be read!");
-            sendInvalidReq(packet, filenameBytes, filenameLengthIndicator);
+            print(e.getMessage());
         }
     }
 
