@@ -33,21 +33,19 @@ public abstract class FileTransfer {
         return numberOfPkts;
     }
 
-    public void setParameters(String fileName, int numberOfPkts, int fileSize, byte identifier, int packetLength) {
-        //this.fileName = fileName;
-        this.fileSize = fileSize;
-        this.fileName = "pic.txt";
-        this.numberOfPkts = numberOfPkts;
-        this.identifier = identifier;
-        this.pktsTransfered = new boolean[numberOfPkts];
-        this.packetLength = packetLength;
-    }
-
     public void pktTransfered(int index) {
         pktsTransfered[index] = true;
         numberOfPktsTransfered++;
         if (numberOfPkts == numberOfPktsTransfered) {
             isComplete = true;
         }
+    }
+
+    public int getNumberOfPkts() {
+        return numberOfPkts;
+    }
+
+    public int getFileSize() {
+        return fileSize;
     }
 }

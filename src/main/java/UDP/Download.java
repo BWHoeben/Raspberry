@@ -20,6 +20,7 @@ public class Download extends FileTransfer {
     private int doubles;
 
     public Download() {
+        this.packetLength = Tools.getPacketLength();
         time = System.nanoTime();
     }
 
@@ -82,6 +83,10 @@ public class Download extends FileTransfer {
         }
     }
 
+    public void setNumOfTotalPkts(int numOfTotalPkts) {
+        this.numberOfPkts = numOfTotalPkts;
+    }
+
     public void initializeWrite() {
         dataMap.put(0, new byte[0]);
         file = new File(fileName);
@@ -97,5 +102,14 @@ public class Download extends FileTransfer {
             System.out.println(e.getMessage());
         }
         dt = new DownloadThread(dataMap, file, dataOutputStream, this);
+    }
+
+    public void setParameters(java.lang.String fileName, byte identifier, int packetLength, int fileSize) {
+        //this.fileName = fileName;
+        this.fileName = "pic.txt";
+        this.identifier = identifier;
+        this.pktsTransfered = new boolean[numberOfPkts];
+        this.packetLength = packetLength;
+        this.fileSize = fileSize;
     }
 }
