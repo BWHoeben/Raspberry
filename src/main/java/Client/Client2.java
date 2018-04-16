@@ -11,12 +11,14 @@ import java.net.*;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Scanner;
+import Tools.HandleHashThread;
 
 public class Client2 extends Thread {
 
     private static DatagramSocket socket;
     private HashMap<Byte, Download> downloads = new HashMap<>();
     private static HashMap<Byte, Upload> uploads = new HashMap<>();
+    private static HashMap<Byte, HandleHashThread> hashThreads = new HashMap<>();
 
     public Client2(DatagramSocket socket) {
         this.socket = socket;
@@ -103,7 +105,7 @@ public class Client2 extends Thread {
             if (socket == null) {
                 socket = new DatagramSocket();
             }
-            byte[] packetContent = Tools.createInitialPacketContentForUpload(filename, destination, socket, uploads);
+            byte[] packetContent = Tools.createInitialPacketContentForUpload(filename, destination, socket, uploads, hashThreads);
             DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, destination.getAddress(), destination.getPort());
             socket.send(initialPacket);
             ListenThread lt = new ListenThread(socket, new Client2(socket));
@@ -138,6 +140,12 @@ public class Client2 extends Thread {
                 //print("Server send acknowledgement for upload");
                 Tools.processAcknowledgement(packet, uploads);
                 break;
+            case Protocol.HASH:
+                Tools.processHash(packet, downloads, socket);
+                break;
+            case Protocol.HASHACK:
+                Tools.handleHashAck(hashThreads, data);
+                break;
             default:
                 print("Unknown message received by server. First byte is: " + data[0]);
                 break;
@@ -163,7 +171,7 @@ public class Client2 extends Thread {
               //  listen = false;
             //}
             print("Download complete");
-            askForTerminate(packet.getAddress());
+//            askForTerminate(packet.getAddress());
         }
     }
 

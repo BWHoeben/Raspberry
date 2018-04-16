@@ -1,4 +1,4 @@
-package Client;
+/*package Client;
 
 import Tools.Protocol;
 import Tools.Tools;
@@ -47,7 +47,7 @@ public class Client {
             if (socket == null) {
                 socket = new DatagramSocket();
             }
-            byte[] packetContent = Tools.createInitialPacketContentForUpload(filename, destination, socket, uploads);
+            byte[] packetContent = Tools.createInitialPacketContentForUpload(filename, destination, socket, uploads, hashThreads);
             DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, destination.getAddress(), destination.getPort());
             socket.send(initialPacket);
             listenForPackets(socket);
@@ -311,3 +311,4 @@ public class Client {
 }
 
 
+*/
