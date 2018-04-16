@@ -6,6 +6,7 @@ import com.sun.org.apache.xpath.internal.operations.String;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -18,10 +19,17 @@ public class Download extends FileTransfer {
     private int writtenUntil = 0;
     private long time;
     private int doubles;
+    private byte[] generatedHash;
+    private byte[] receivedHash;
+    private boolean hashReceived = false;
 
     public Download() {
         this.packetLength = Tools.getPacketLength();
         time = System.nanoTime();
+    }
+
+    public boolean hasReceivedHash() {
+        return hashReceived;
     }
 
     public void addData(int pktNum, byte[] data) {
@@ -37,7 +45,7 @@ public class Download extends FileTransfer {
                     try {
                         Thread.sleep(10);
                     } catch (InterruptedException e) {
-                        e.printStackTrace();
+                        print(e.getMessage());
                     }
                 }
                 dt = new DownloadThread(dataMap, file, dataOutputStream, this);
@@ -45,24 +53,55 @@ public class Download extends FileTransfer {
                 try {
                     dt.join();
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    print(e.getMessage());
                 }
 
                 try {
                     dataOutputStream.flush();
                     dataOutputStream.close();
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    print(e.getMessage());
                 }
-                double elapsedTime = (double) System.nanoTime() - (double) time;
-                double timeInSec = elapsedTime / 1000000000.0;
-                System.out.println("Time elapsed: " + timeInSec + " seconds");
-                double speed = ((double) fileSize / 250000.0 ) / timeInSec;
-                System.out.println("Average speed: " + speed + " Mbps");
-                System.out.println("Redundant transmissions: " + doubles);
+                if (hashReceived) {
+                    verifyHash();
+                } else {
+                    print("Download complete but waiting for hash.");
+                }
             }
         } else{
             doubles++;
+        }
+    }
+
+    private void generateHash() {
+        generatedHash = Tools.getHash(fileName);
+    }
+
+    private void verifyHash() {
+        generateHash();
+        if (Arrays.equals(receivedHash, generatedHash)) {
+            print("Hashes match!");
+        } else {
+            print("Hashes don't match");
+            print("Received hash: " + new java.lang.String(receivedHash));
+            print("Generated hash: " + new java.lang.String(generatedHash));
+        }
+        double elapsedTime = (double) System.nanoTime() - (double) time;
+        double timeInSec = elapsedTime / 1000000000.0;
+        print("Time elapsed: " + timeInSec + " seconds");
+        double speed = ((double) fileSize / 250000.0) / timeInSec;
+        print("Average speed: " + speed + " Mbps");
+        print("Redundant transmissions: " + doubles);
+    }
+
+    public void processHash(byte[] hash) {
+        if (!hashReceived) {
+            receivedHash = hash;
+            if (!isComplete) {
+                hashReceived = true;
+            } else {
+                verifyHash();
+            }
         }
     }
 
@@ -96,10 +135,10 @@ public class Download extends FileTransfer {
                         new BufferedOutputStream(
                                 Files.newOutputStream(Paths.get(fileName))));
             } catch (IOException e) {
-                e.printStackTrace();
+                print(e.getMessage());
             }
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            print(e.getMessage());
         }
         dt = new DownloadThread(dataMap, file, dataOutputStream, this);
     }
@@ -111,5 +150,9 @@ public class Download extends FileTransfer {
         this.pktsTransfered = new boolean[numberOfPkts];
         this.packetLength = packetLength;
         this.fileSize = fileSize;
+    }
+
+    private void print(java.lang.String msg) {
+        System.out.println(msg);
     }
 }

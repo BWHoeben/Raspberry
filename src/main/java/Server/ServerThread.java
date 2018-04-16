@@ -1,5 +1,6 @@
 package Server;
 
+import Tools.HandleHashThread;
 import Tools.Protocol;
 import Tools.Tools;
 import UDP.*;
@@ -14,6 +15,7 @@ public class ServerThread extends Thread {
     private DatagramSocket socket;
     private HashMap<Byte, Download> downloads = new HashMap<>();
     private HashMap<Byte, Upload> uploads = new HashMap<>();
+    private HashMap<Byte, HandleHashThread> hashThreads = new HashMap<>();
 
     public ServerThread() throws IOException {
         this("BWH");
@@ -87,6 +89,12 @@ public class ServerThread extends Thread {
                 print("Client wants to abort file transfer.");
                 abortTransfer(packet);
                 break;
+            case Protocol.HASHACK:
+                Tools.handleHashAck(hashThreads, dataFromClient);
+                break;
+            case Protocol.HASH:
+                // todo
+                break;
             default:
                 print("Received message does not adhere to protocol. Discarding message.");
                 break;
@@ -132,7 +140,7 @@ public class ServerThread extends Thread {
         String fileName = new String(filenameBytes);
         print("Client requested: " + fileName);
         Destination destination = new Destination(packet.getPort(), packet.getAddress());
-        byte[] packetContent = Tools.createInitialPacketContentForUpload(fileName, destination, socket, uploads);
+        byte[] packetContent = Tools.createInitialPacketContentForUpload(fileName, destination, socket, uploads, hashThreads);
         DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, packet.getAddress(), packet.getPort());
         try {
             socket.send(initialPacket);
@@ -163,10 +171,6 @@ public class ServerThread extends Thread {
             }
         }
         return b;
-    }
-
-    private byte[] createChecksum() {
-        return null;
     }
 
     private void listFiles(DatagramPacket packet, DatagramSocket socket) {

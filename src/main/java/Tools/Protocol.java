@@ -15,7 +15,8 @@ public class Protocol {
     7 --> pause file transfer
     8 --> resume file transfer
     9 --> abort file transfer
-
+    10 --> hash for file
+    11 --> acknowledgement for hash
      */
 
     public static final byte SHOWFILES = 0;
@@ -28,4 +29,6 @@ public class Protocol {
     public static final byte PAUSE = 7;
     public static final byte RESUME = 8;
     public static final byte ABORT = 9;
+    public static final byte HASH = 10;
+    public static final byte HASHACK = 11;
 }

@@ -9,12 +9,15 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
+import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.security.NoSuchAlgorithmException;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 
 public class Tools {
 
@@ -35,7 +38,7 @@ public class Tools {
         return packetLength;
     }
 
-    public static byte[] intToByteArray (final int integer) {
+    public static byte[] intToByteArray(final int integer) {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(bos);
         try {
@@ -56,17 +59,17 @@ public class Tools {
     }
 
     public static byte[] appendThisMapToAnArray(Map<Integer, byte[]> map) {
-     byte[] returnArray = new byte[0];
-     int entriesInMap = map.size();
-     int entriesObtained = 0;
-     int i = 0;
-     while (entriesObtained < entriesInMap) {
-         if (map.containsKey(i)) {
-             returnArray = appendBytes(returnArray, map.get(i));
-             entriesObtained++;
-         }
-     i++;
-     }
+        byte[] returnArray = new byte[0];
+        int entriesInMap = map.size();
+        int entriesObtained = 0;
+        int i = 0;
+        while (entriesObtained < entriesInMap) {
+            if (map.containsKey(i)) {
+                returnArray = appendBytes(returnArray, map.get(i));
+                entriesObtained++;
+            }
+            i++;
+        }
         return returnArray;
     }
 
@@ -97,10 +100,14 @@ public class Tools {
 
 
     public static byte[] createInitialPacketContentForUpload(String fileName, Destination destination,
-                                                              DatagramSocket socket,
-                                                             Map<Byte, Upload> uploads) {
+                                                             DatagramSocket socket,
+                                                             Map<Byte, Upload> uploads, HashMap<Byte, HandleHashThread> hashThreads) {
         Upload upload = new Upload(destination);
         byte identifier = getIdentifierForUpload(uploads);
+
+        HandleHashThread hht = new HandleHashThread(fileName, destination, socket, identifier);
+        hashThreads.put(identifier, hht);
+        hht.start();
 
         upload.initializeFileRead(fileName);
         upload.setParameters(fileName, identifier, packetLength);
@@ -185,6 +192,18 @@ public class Tools {
         }
     }
 
+    private static void sendAcknowledgementForHash(InetAddress address, int port, byte identifier, DatagramSocket socket) {
+        byte[] packet = new byte[2];
+        packet[0] = Protocol.HASHACK;
+        packet[1] = identifier;
+        DatagramPacket pkt = new DatagramPacket(packet, packet.length, address, port);
+        try {
+            socket.send(pkt);
+        } catch (IOException e) {
+            print(e.getMessage());
+        }
+    }
+
     public static boolean processDownloadPacket(DatagramPacket packet, Map<Byte, Download> downloads, DatagramSocket socket) {
         byte[] data = packet.getData();
         byte identifier = data[1];
@@ -201,7 +220,7 @@ public class Tools {
             download.addData(pktNumber, receivedData);
 
             // This method returns true if download is complete
-            if (download.isComplete()) {
+            if (download.isComplete() && download.hasReceivedHash()) {
                 downloads.remove(identifier);
                 return true;
             } else {
@@ -234,9 +253,56 @@ public class Tools {
         }
     }
 
+    public static byte[] getHash(String filename) {
+        try {
+            File file = new File(filename);
+            MessageDigest md5Digest = MessageDigest.getInstance("MD5");
+            try (FileInputStream fis = new FileInputStream(file)) {
+                byte[] byteArray = new byte[1024];
+                int bytesCount = 0;
+
+                while ((bytesCount = fis.read(byteArray)) != -1){
+                    md5Digest.update(byteArray, 0, bytesCount);
+                }
+
+                return md5Digest.digest();
+            }
+        } catch (IOException e) {
+            print(e.getMessage());
+            return new byte[0];
+        } catch (NoSuchAlgorithmException e) {
+            print(e.getMessage());
+            return new byte[0];
+        }
+    }
+
+    public static void processHash(DatagramPacket packet, Map<Byte, Download> downloads, DatagramSocket socket) {
+        byte[] data = packet.getData();
+        byte identifier = data[1];
+        sendAcknowledgementForHash(packet.getAddress(), packet.getPort(), identifier, socket);
+        byte[] hashIndicator = Arrays.copyOfRange(data, 2, 6);
+        int hashLength = ByteBuffer.wrap(hashIndicator).getInt();
+        byte[] hash = Arrays.copyOfRange(data,6, 6 + hashLength);
+        Download download = downloads.get(identifier);
+        if (!download.hasReceivedHash()) {
+            download.processHash(hash);
+        } else {
+            print("Hash was already received.");
+        }
+    }
+
+    public static void handleHashAck(HashMap<Byte, HandleHashThread> hashThreads, byte[] data) {
+        byte identifier = data[1];
+        HandleHashThread hht = hashThreads.get(identifier);
+        hht.cancelTimerForHashPacket();
+    }
 
     private static void print(String msg) {
         System.out.println(msg);
+    }
+
+    public static int getTimeOut() {
+        return timeOut;
     }
 
 }

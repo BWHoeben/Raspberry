@@ -63,8 +63,8 @@ public class Upload extends FileTransfer {
     }
 
     public void initializeFileRead(String fileName) {
-        String dir = "/home/pi/" + fileName;
-        //String dir = fileName;
+        //String dir = "/home/pi/" + fileName;
+        String dir = fileName;
         this.fileSize = (int) new File(dir).length();
         this.numberOfPkts = (int) Math.ceil((double) fileSize / (packetLength - 10)) + 1;
         try (FileChannel channel = new FileInputStream(dir).getChannel()) {
@@ -222,5 +222,4 @@ public class Upload extends FileTransfer {
         this.pktsTransfered = new boolean[numberOfPkts];
         this.packetLength = packetLength;
     }
-
 }
