@@ -12,8 +12,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Scanner;
 import Tools.HandleHashThread;
+import com.nedap.university.Computer;
 
-public class Client2 extends Thread {
+public class Client2 extends Thread implements Computer {
 
     private static DatagramSocket socket;
     private HashMap<Byte, Download> downloads = new HashMap<>();

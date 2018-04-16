@@ -22,6 +22,7 @@ public class Download extends FileTransfer {
     private byte[] generatedHash;
     private byte[] receivedHash;
     private boolean hashReceived = false;
+    private boolean hashVerified = false;
 
     public Download() {
         this.packetLength = Tools.getPacketLength();
@@ -78,20 +79,23 @@ public class Download extends FileTransfer {
     }
 
     private void verifyHash() {
-        generateHash();
-        if (Arrays.equals(receivedHash, generatedHash)) {
-            print("Hashes match!");
-        } else {
-            print("Hashes don't match");
-            print("Received hash: " + new java.lang.String(receivedHash));
-            print("Generated hash: " + new java.lang.String(generatedHash));
+        if (!hashVerified) {
+            generateHash();
+            if (Arrays.equals(receivedHash, generatedHash)) {
+                hashVerified = true;
+                print("Hashes match!");
+            } else {
+                print("Hashes don't match");
+                print("Received hash: " + new java.lang.String(receivedHash));
+                print("Generated hash: " + new java.lang.String(generatedHash));
+            }
+            double elapsedTime = (double) System.nanoTime() - (double) time;
+            double timeInSec = elapsedTime / 1000000000.0;
+            print("Time elapsed: " + timeInSec + " seconds");
+            double speed = ((double) fileSize / 250000.0) / timeInSec;
+            print("Average speed: " + speed + " Mbps");
+            print("Redundant transmissions: " + doubles);
         }
-        double elapsedTime = (double) System.nanoTime() - (double) time;
-        double timeInSec = elapsedTime / 1000000000.0;
-        print("Time elapsed: " + timeInSec + " seconds");
-        double speed = ((double) fileSize / 250000.0) / timeInSec;
-        print("Average speed: " + speed + " Mbps");
-        print("Redundant transmissions: " + doubles);
     }
 
     public void processHash(byte[] hash) {
@@ -144,8 +148,8 @@ public class Download extends FileTransfer {
     }
 
     public void setParameters(java.lang.String fileName, byte identifier, int packetLength, int fileSize) {
-        this.fileName = fileName;
-        //this.fileName = "pictrue1.txt";
+        //this.fileName = fileName;
+        this.fileName = "pic.txt";
         this.identifier = identifier;
         this.pktsTransfered = new boolean[numberOfPkts];
         this.packetLength = packetLength;

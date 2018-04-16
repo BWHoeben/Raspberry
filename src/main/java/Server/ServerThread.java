@@ -1,16 +1,18 @@
 package Server;
 
+import Client.ListenThread;
 import Tools.HandleHashThread;
 import Tools.Protocol;
 import Tools.Tools;
 import UDP.*;
+import com.nedap.university.Computer;
 
 import java.io.*;
 import java.net.*;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-public class ServerThread extends Thread {
+public class ServerThread extends Thread implements Computer {
 
     private DatagramSocket socket;
     private HashMap<Byte, Download> downloads = new HashMap<>();
@@ -21,7 +23,7 @@ public class ServerThread extends Thread {
         this("BWH");
     }
 
-    private ServerThread(String name) throws IOException {
+    private ServerThread(String name) {
         super(name);
 
         int port = Tools.getPort();
@@ -43,8 +45,7 @@ public class ServerThread extends Thread {
         } catch (UnknownHostException e) {
             print(e.getMessage());
         }
-        print("Localhost = " + host);
-        while (true) {
+        /*while (true) {
             byte[] buf = new byte[Tools.getPacketLength()];
             DatagramPacket packetReceived = new DatagramPacket(buf, buf.length);
             try {
@@ -52,11 +53,14 @@ public class ServerThread extends Thread {
             } catch (IOException e) {
                 print(e.getMessage());
             }
-            handlePacketFromClient(packetReceived, socket);
-        }
+            handlePacket(packetReceived);
+        }*/
+        ListenThread lt = new ListenThread(socket, this);
+        lt.start();
     }
 
-    private void handlePacketFromClient(DatagramPacket packet, DatagramSocket socket) {
+    @Override
+    public void handlePacket(DatagramPacket packet) {
         byte[] dataFromClient = packet.getData();
         byte firstByte = dataFromClient[0];
         switch (firstByte) {

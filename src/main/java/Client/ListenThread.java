@@ -1,6 +1,7 @@
 package Client;
 
 import Tools.Tools;
+import com.nedap.university.Computer;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -9,12 +10,12 @@ import java.net.DatagramSocket;
 public class ListenThread extends  Thread {
 
     private DatagramSocket socket;
-    private Client2 client2;
+    private Computer computer;
     private boolean listen = true;
 
-    public ListenThread(DatagramSocket socket, Client2 client2) {
+    public ListenThread(DatagramSocket socket, Computer computer) {
         this.socket = socket;
-        this.client2 = client2;
+        this.computer = computer;
     }
 
     @Override
@@ -27,7 +28,7 @@ public class ListenThread extends  Thread {
             } catch (IOException e) {
                 print(e.getMessage());
             }
-            client2.handlePacket(packet);
+            computer.handlePacket(packet);
         }
     }
 
