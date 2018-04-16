@@ -93,7 +93,7 @@ public class ServerThread extends Thread {
                 Tools.handleHashAck(hashThreads, dataFromClient);
                 break;
             case Protocol.HASH:
-                // todo
+                Tools.processHash(packet, downloads, socket);
                 break;
             default:
                 print("Received message does not adhere to protocol. Discarding message.");

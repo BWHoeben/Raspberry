@@ -21,8 +21,8 @@ import java.io.IOException;
 
 public class Tools {
 
-    private static int packetLength = 65000;
-    private static int slidingWindow = 25;
+    private static int packetLength = 65000;//65000
+    private static int slidingWindow = 25;//25;
     private static int timeOut = 1000;
     private static int port = 12555;
 
@@ -153,7 +153,6 @@ public class Tools {
 
     public static void handleInitialPacket(DatagramPacket packet, Map<Byte, Download> downloads, DatagramSocket socket) {
         byte[] data = packet.getData();
-        Download download = new Download();
         byte[] numOfPkts = Arrays.copyOfRange(data, 1, 5);
         int totalPkts = ByteBuffer.wrap(numOfPkts).getInt();
         print("Total number of packets: " + totalPkts);
@@ -162,6 +161,12 @@ public class Tools {
         print("File size: " + fs + " bytes");
         byte identifier = data[9];
         print("Identifier: " + identifier);
+        Download download;
+        if (!downloads.containsKey(identifier)) {
+            download = new Download();
+        } else {
+            download = downloads.get(identifier);
+        }
         int fileLengthIndicator = (int) data[10];
         byte[] fileName = Arrays.copyOfRange(data, 11, 11 + fileLengthIndicator);
         print("File name: " + new String(fileName));
@@ -276,6 +281,8 @@ public class Tools {
         }
     }
 
+
+
     public static void processHash(DatagramPacket packet, Map<Byte, Download> downloads, DatagramSocket socket) {
         byte[] data = packet.getData();
         byte identifier = data[1];
@@ -283,7 +290,13 @@ public class Tools {
         byte[] hashIndicator = Arrays.copyOfRange(data, 2, 6);
         int hashLength = ByteBuffer.wrap(hashIndicator).getInt();
         byte[] hash = Arrays.copyOfRange(data,6, 6 + hashLength);
-        Download download = downloads.get(identifier);
+        Download download;
+        if (downloads.containsKey(identifier)) {
+            download = downloads.get(identifier);
+        } else {
+            download = new Download();
+            downloads.put(identifier, download);
+        }
         if (!download.hasReceivedHash()) {
             download.processHash(hash);
         } else {

@@ -144,8 +144,8 @@ public class Download extends FileTransfer {
     }
 
     public void setParameters(java.lang.String fileName, byte identifier, int packetLength, int fileSize) {
-        //this.fileName = fileName;
-        this.fileName = "pic.txt";
+        this.fileName = fileName;
+        //this.fileName = "pictrue1.txt";
         this.identifier = identifier;
         this.pktsTransfered = new boolean[numberOfPkts];
         this.packetLength = packetLength;
