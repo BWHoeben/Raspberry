@@ -84,7 +84,7 @@ public class Download extends FileTransfer {
         } else {
             print("Hashes don't match");
             print("Received hash: " + new java.lang.String(receivedHash));
-            print("generated hash: " + new java.lang.String(generatedHash));
+            print("Generated hash: " + new java.lang.String(generatedHash));
         }
         double elapsedTime = (double) System.nanoTime() - (double) time;
         double timeInSec = elapsedTime / 1000000000.0;
@@ -95,11 +95,13 @@ public class Download extends FileTransfer {
     }
 
     public void processHash(byte[] hash) {
-        if (!isComplete) {
-            hashReceived = true;
+        if (!hashReceived) {
             receivedHash = hash;
-        } else {
-            verifyHash();
+            if (!isComplete) {
+                hashReceived = true;
+            } else {
+                verifyHash();
+            }
         }
     }
 

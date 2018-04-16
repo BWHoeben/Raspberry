@@ -220,7 +220,7 @@ public class Tools {
             download.addData(pktNumber, receivedData);
 
             // This method returns true if download is complete
-            if (download.isComplete()) {
+            if (download.isComplete() && download.hasReceivedHash()) {
                 downloads.remove(identifier);
                 return true;
             } else {
