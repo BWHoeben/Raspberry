@@ -1,19 +1,15 @@
 package Tools;
 
+import Client.InputThread;
 import UDP.Destination;
 import UDP.Download;
 import UDP.Upload;
 
 import java.io.*;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
+import java.util.*;
 import java.security.NoSuchAlgorithmException;
 import java.io.File;
 import java.io.FileInputStream;
@@ -21,8 +17,15 @@ import java.io.IOException;
 
 public class Tools {
 
-    private static int packetLength = 65000;//65000
-    private static int slidingWindow = 25;//25;
+    /*
+        Recommended values:
+            packetLength    =   65000
+            slidingWindow   =      25
+            timeOut         =    1000
+     */
+
+    private static int packetLength = 65000;
+    private static int slidingWindow = 25;
     private static int timeOut = 1000;
     private static int port = 12555;
 
@@ -73,25 +76,15 @@ public class Tools {
         return returnArray;
     }
 
-    public static HashSet<String> getFilenamesFromPi() {
-        File folder = new File(System.getProperty("user.dir") + "/home/pi/");
-        File[] listOfFiles = folder.listFiles();
-        HashSet<String> set = new HashSet<>();
-        for (int i = 0; i < listOfFiles.length; i++) {
-            if (listOfFiles[i].isFile()) {
-                set.add(listOfFiles[i].getName());
-            }
-        }
-        return set;
-    }
-
-    public static HashSet<String> getFilenames() {
+    public static Set<String> getFilenames() {
         File folder = new File(System.getProperty("user.dir"));
         File[] listOfFiles = folder.listFiles();
         HashSet<String> set = new HashSet<>();
-        for (int i = 0; i < listOfFiles.length; i++) {
-            if (listOfFiles[i].isFile()) {
-                set.add(listOfFiles[i].getName());
+        if (listOfFiles != null) {
+            for (File file : listOfFiles) {
+                if (file.isFile()) {
+                    set.add(file.getName());
+                }
             }
         }
         return set;
@@ -99,7 +92,7 @@ public class Tools {
 
     public static byte[] createInitialPacketContentForUpload(String fileName, Destination destination,
                                                              DatagramSocket socket,
-                                                             Map<Byte, Upload> uploads, HashMap<Byte, HandleHashThread> hashThreads) {
+                                                             Map<Byte, Upload> uploads, Map<Byte, HandleHashThread> hashThreads) {
         Upload upload = new Upload(destination);
         byte identifier = getIdentifierForUpload(uploads);
 
@@ -111,6 +104,7 @@ public class Tools {
         upload.setParameters(fileName, identifier, packetLength);
 
         uploads.put(identifier, upload);
+        print("Number of clients: " + uploads.size());
         upload.initialize(socket, slidingWindow, timeOut);
 
 
@@ -137,7 +131,7 @@ public class Tools {
     private static byte getIdentifierForUpload(Map<Byte, Upload> uploads) {
         boolean loop = true;
         byte b = 0;
-        if (uploads.size() > 1) {
+        if (uploads.size() > 0) {
             while (loop) {
                 if (uploads.containsKey(b)) {
                     b++;
@@ -149,7 +143,7 @@ public class Tools {
         return b;
     }
 
-    public static void handleInitialPacket(DatagramPacket packet, Map<Byte, Download> downloads, DatagramSocket socket) {
+    public static void handleInitialPacket(DatagramPacket packet, Map<Byte, Download> downloads, DatagramSocket socket, Scanner scanner) {
         byte[] data = packet.getData();
         byte[] numOfPkts = Arrays.copyOfRange(data, 1, 5);
         int totalPkts = ByteBuffer.wrap(numOfPkts).getInt();
@@ -171,10 +165,16 @@ public class Tools {
         download.setNumOfTotalPkts(totalPkts);
         download.setParameters(new String(fileName), identifier, Tools.getPacketLength(), fs);
         download.initializeWrite();
-        download.pktTransfered(0);
+        download.pktTransferred(0);
         downloads.put(identifier, download);
         sendAcknowledgement(packet.getAddress(), packet.getPort(), 0, (byte) identifier, socket);
         print("Downloading...");
+        if (scanner != null) {
+            Destination destination = new Destination(packet.getPort(), packet.getAddress());
+            InputThread<Download> it = new InputThread(scanner, identifier, destination, socket, download, downloads);
+            download.setInputThread(it);
+            it.start();
+        }
     }
 
     private static void sendAcknowledgement(InetAddress address, int port, int pktNumber, byte identifier, DatagramSocket socket) {
@@ -214,23 +214,26 @@ public class Tools {
         byte[] pktNum = Arrays.copyOfRange(data, 2, 6);
         int pktNumber = ByteBuffer.wrap(pktNum).getInt();
         Tools.sendAcknowledgement(packet.getAddress(), packet.getPort(), pktNumber, identifier, socket);
+
         if (download != null) {
-            //print("Server send packet " + pktNumber +  " for download " + identifier + " with size: " + packet.getData().length);
-            download.pktTransfered(pktNumber);
+            download.pktTransferred(pktNumber);
             byte[] dataLen = Arrays.copyOfRange(data, 6, 10);
+            //print("Server send packet " + pktNumber +  " for download " + identifier + " with size: " + packet.getData().length);
             int dataLength = ByteBuffer.wrap(dataLen).getInt();
             byte[] receivedData = Arrays.copyOfRange(data, 10, 10 + dataLength);
             download.addData(pktNumber, receivedData);
-
             // This method returns true if download is complete
             if (download.isComplete() && download.hasReceivedHash()) {
                 downloads.remove(identifier);
-                return true;
-            } else {
-                return false;
-            }
+                if (download.getInputThread() != null) {
+                    download.getInputThread().stopListening();
+                }
+                    return true;
+                } else {
+                    return false;
+                }
         } else {
-            return true;
+            return false;
         }
     }
 
@@ -239,20 +242,24 @@ public class Tools {
         byte identifier = data[1];
         byte[] pktNum = Arrays.copyOfRange(packet.getData(), 2, 6);
         int pktNumber = ByteBuffer.wrap(pktNum).getInt();
-        Upload upload = uploads.get(identifier);
-        if (pktNumber != 0 && upload != null) {
-            upload.cancelTimerForPacket(pktNumber);
-        }
-        //print("Acknowledgement received. Packet#: " + pktNumber + " Identifier: " + identifier);
-        upload.pktTransfered(pktNumber);
-        upload.acknowledgePacket(pktNumber);
-        if (upload.isComplete()) {
-            upload.cancelAllTimers();
-            print("Upload completed!");
-            print("Time outs: " + upload.getTimeOuts());
-            uploads.remove(identifier);
-        } else {
-            upload.continueUpload();
+        if (uploads.containsKey(identifier)) {
+            Upload upload = uploads.get(identifier);
+            if (upload!= null) {
+                if (pktNumber != 0) {
+                    upload.cancelTimerForPacket(pktNumber);
+                }
+                //print("Acknowledgement received. Packet#: " + pktNumber + " Identifier: " + identifier);
+                upload.pktTransferred(pktNumber);
+                upload.acknowledgePacket(pktNumber);
+                if (upload.isComplete()) {
+                    upload.cancelAllTimers();
+                    print("Upload completed!");
+                    print("Time outs: " + upload.getTimeOuts());
+                    uploads.remove(identifier);
+                } else {
+                    upload.continueUpload();
+                }
+            }
         }
     }
 
@@ -264,22 +271,17 @@ public class Tools {
                 byte[] byteArray = new byte[1024];
                 int bytesCount = 0;
 
-                while ((bytesCount = fis.read(byteArray)) != -1){
+                while ((bytesCount = fis.read(byteArray)) != -1) {
                     md5Digest.update(byteArray, 0, bytesCount);
                 }
 
                 return md5Digest.digest();
             }
-        } catch (IOException e) {
-            print(e.getMessage());
-            return new byte[0];
-        } catch (NoSuchAlgorithmException e) {
+        } catch (IOException | NoSuchAlgorithmException e) {
             print(e.getMessage());
             return new byte[0];
         }
     }
-
-
 
     public static void processHash(DatagramPacket packet, Map<Byte, Download> downloads, DatagramSocket socket) {
         byte[] data = packet.getData();
@@ -287,7 +289,7 @@ public class Tools {
         sendAcknowledgementForHash(packet.getAddress(), packet.getPort(), identifier, socket);
         byte[] hashIndicator = Arrays.copyOfRange(data, 2, 6);
         int hashLength = ByteBuffer.wrap(hashIndicator).getInt();
-        byte[] hash = Arrays.copyOfRange(data,6, 6 + hashLength);
+        byte[] hash = Arrays.copyOfRange(data, 6, 6 + hashLength);
         Download download;
         if (downloads.containsKey(identifier)) {
             download = downloads.get(identifier);
@@ -320,4 +322,31 @@ public class Tools {
         return new File(filename).exists();
     }
 
+    public static InetAddress getRaspberryAddress(int lower, int upper) {
+        String subnet = "192.168.1.";
+        InetAddress myOwnAddress = null;
+        try {
+            myOwnAddress = InetAddress.getLocalHost();
+        } catch (UnknownHostException e) {
+            print(e.getMessage());
+        }
+
+        for (int i = lower; i <= upper; i++) {
+            String host = subnet + i;
+            try {
+                InetAddress inetAddress = InetAddress.getByName(host);
+                if (inetAddress.isReachable(timeOut) && !inetAddress.equals(myOwnAddress)) {
+                    return inetAddress;
+                }
+            } catch (IOException e) {
+                print(e.getMessage());
+            }
+        }
+        try {
+            return InetAddress.getLocalHost();
+        } catch (UnknownHostException e) {
+            print(e.getMessage());
+        }
+        return myOwnAddress;
+    }
 }

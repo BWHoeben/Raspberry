@@ -1,7 +1,7 @@
 package UDP;
 
+import Client.InputThread;
 import Tools.Tools;
-import com.sun.org.apache.xpath.internal.operations.String;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -23,6 +23,7 @@ public class Download extends FileTransfer {
     private byte[] receivedHash;
     private boolean hashReceived = false;
     private boolean hashVerified = false;
+    private InputThread it;
 
     public Download() {
         this.packetLength = Tools.getPacketLength();
@@ -38,10 +39,11 @@ public class Download extends FileTransfer {
             dataMap.put(pktNum, data);
             if (!isComplete) {
                 if (!dt.isAlive()) {
-                    dt = new DownloadThread(dataMap, file, dataOutputStream, this);
+                    dt = new DownloadThread(dataMap, dataOutputStream, this);
                     dt.start();
                 }
             } else {
+                print("All packets received. Still writing to file.");
                 while (dt.isAlive()) {
                     try {
                         Thread.sleep(10);
@@ -49,7 +51,7 @@ public class Download extends FileTransfer {
                         print(e.getMessage());
                     }
                 }
-                dt = new DownloadThread(dataMap, file, dataOutputStream, this);
+                dt = new DownloadThread(dataMap, dataOutputStream, this);
                 dt.start();
                 try {
                     dt.join();
@@ -144,11 +146,10 @@ public class Download extends FileTransfer {
         } catch (Exception e) {
             print(e.getMessage());
         }
-        dt = new DownloadThread(dataMap, file, dataOutputStream, this);
+        dt = new DownloadThread(dataMap, dataOutputStream, this);
     }
 
     public void setParameters(java.lang.String fileName, byte identifier, int packetLength, int fileSize) {
-        //this.fileName = fileName;
         this.fileName = "pic.txt";
         this.identifier = identifier;
         this.pktsTransfered = new boolean[numberOfPkts];
@@ -158,5 +159,13 @@ public class Download extends FileTransfer {
 
     private void print(java.lang.String msg) {
         System.out.println(msg);
+    }
+
+    public void setInputThread(InputThread it) {
+        this.it = it;
+    }
+
+    public InputThread getInputThread() {
+        return it;
     }
 }

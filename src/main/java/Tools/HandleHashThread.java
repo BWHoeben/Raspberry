@@ -67,10 +67,12 @@ public class HandleHashThread extends Thread {
     }
 
     public void cancelTimerForHashPacket() {
-        timer.cancel();
-        timer.purge();
-        if (hht != null) {
-            hht.cancelTimerForHashPacket();
+        if (timer != null){
+            timer.cancel();
+            timer.purge();
+            if (hht != null) {
+                hht.cancelTimerForHashPacket();
+            }
         }
     }
 }

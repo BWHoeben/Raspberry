@@ -4,75 +4,59 @@ import Tools.Tools;
 import Tools.Protocol;
 import UDP.Destination;
 import UDP.Download;
+import UDP.PacketState;
 import UDP.Upload;
 
 import java.io.IOException;
 import java.net.*;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Scanner;
+import java.util.*;
 
 import Tools.HandleHashThread;
 import com.nedap.university.Computer;
 
-public class Client2 extends Thread implements Computer {
+public class Client2 implements Computer {
 
     private static DatagramSocket socket;
     private HashMap<Byte, Download> downloads = new HashMap<>();
     private static HashMap<Byte, Upload> uploads = new HashMap<>();
     private static HashMap<Byte, HandleHashThread> hashThreads = new HashMap<>();
     private static ListenThread lt;
+    private static Timer timerForReq;
 
-    public Client2(DatagramSocket socket) {
+    private static Scanner scanner = new Scanner(System.in);
+
+    private Client2(DatagramSocket socket) {
         this.socket = socket;
     }
 
     public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-        InetAddress address = askForHost(scanner);
-        print("Inet address created.");
-        upOrDown(address, scanner);
-    }
-
-    private static InetAddress askForHost(Scanner scanner) {
-        while (true) {
-            try {
-                print("Provide host address or press the return key to use localhost.");
-                String answer = scanner.nextLine();
-                if (answer.isEmpty()) {
-                    return InetAddress.getByName("localhost");
-                } else {
-                    return InetAddress.getByName(answer);
-                }
-            } catch (UnknownHostException e) {
-                print("Unknown host. Try again");
-            }
-        }
+        InetAddress address = Tools.getRaspberryAddress(1, 10);
+        print("Connected to " + address.getHostName());
+        upOrDown(address);
     }
 
     private static void print(String msg) {
         System.out.println(msg);
     }
 
-    private static void upOrDown(InetAddress address, Scanner scanner) {
+    private static void upOrDown(InetAddress address) {
         while (true) {
             print("Download or upload? (u/d)");
             String answer = scanner.nextLine();
             if (answer.equalsIgnoreCase("u")) {
                 Destination destination = new Destination(Tools.getPort(), address);
-                upload(destination, scanner);
+                upload(destination);
                 break;
             } else if (answer.equalsIgnoreCase("d")) {
                 print("Please provide the name of the file you want to download or press the return key to get a list of available files...");
                 answer = scanner.nextLine();
                 if (answer.isEmpty()) {
                     print("Requesting available files...");
-                    requestFile("", address);
+                        requestFile("", address);
                 } else {
                     print("Requesting file: " + answer);
                     requestFile(answer, address);
                 }
-                scanner.close();
                 break;
             } else {
                 print("Unkown input. Please provide 'u' or 'd'.");
@@ -80,7 +64,7 @@ public class Client2 extends Thread implements Computer {
         }
     }
 
-    private static void upload(Destination destination, Scanner scanner) {
+    private static void upload(Destination destination) {
         while (true) {
             print("Enter the name of the file you want to upload or press the return key to list available files.");
             String answer = scanner.nextLine();
@@ -90,7 +74,6 @@ public class Client2 extends Thread implements Computer {
             } else {
                 if (Tools.fileExists(answer)) {
                     startUpload(destination, answer);
-                    scanner.close();
                     break;
                 } else {
                     print("No such file. Try again.");
@@ -100,7 +83,7 @@ public class Client2 extends Thread implements Computer {
     }
 
     private static void listFiles() {
-        HashSet<String> fileNames = Tools.getFilenames();
+        Set<String> fileNames = Tools.getFilenames();
         for (String filename : fileNames) {
             print(filename);
         }
@@ -114,37 +97,40 @@ public class Client2 extends Thread implements Computer {
             }
             byte[] packetContent = Tools.createInitialPacketContentForUpload(filename, destination, socket, uploads, hashThreads);
             DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, destination.getAddress(), destination.getPort());
+            byte identifier = packetContent[9];
             socket.send(initialPacket);
             lt = new ListenThread(socket, new Client2(socket));
             lt.start();
+            Upload upload = uploads.get(identifier);
+            InputThread<Upload> it = new InputThread<>(scanner, identifier, destination, socket, upload, uploads);
+            it.start();
         } catch (IOException e) {
             print(e.getMessage());
         }
     }
 
     public void handlePacket(DatagramPacket packet) {
-        //ListenThread lt = new ListenThread(socket, this);
-        //lt.start();
         byte[] data = packet.getData();
         byte ind = data[0];
         switch (ind) {
             case Protocol.LISTOFFILES:
+                cancelTimerForReq();
                 print("Server send list of files:");
                 processList(data, packet.getAddress());
                 break;
             case Protocol.INVALIDREQ:
-                invalidReq(data, packet);
+                cancelTimerForReq();
+                invalidReq(data);
                 break;
             case Protocol.INITUP:
+                cancelTimerForReq();
                 print("Server send initial packet for requested download");
-                Tools.handleInitialPacket(packet, downloads, socket);
-                //showOptions(packet);
+                Tools.handleInitialPacket(packet, downloads, socket, scanner);
                 break;
             case Protocol.ADDUP:
                 downloadPacket(packet);
                 break;
             case Protocol.ACKDOWN:
-                //print("Server send acknowledgement for upload");
                 Tools.processAcknowledgement(packet, uploads);
                 break;
             case Protocol.HASH:
@@ -160,51 +146,46 @@ public class Client2 extends Thread implements Computer {
         }
     }
 
-    private void invalidReq(byte[] data, DatagramPacket packet) {
-        int filenamelength = data[1];
-        byte[] filenameBytes = new byte[filenamelength];
-        for (int i = 0; i < filenamelength; i++) {
+    private void cancelTimerForReq() {
+        timerForReq.cancel();
+        timerForReq.purge();
+    }
+
+    private void invalidReq(byte[] data) {
+        int filenameLength = data[1];
+        byte[] filenameBytes = new byte[filenameLength];
+        for (int i = 0; i < filenameLength; i++) {
             filenameBytes[i] = data[2 + i];
         }
         String fileName = new String(filenameBytes);
         print("Server was not able to retrieve file: " + fileName);
-        askForTerminate(packet.getAddress());
+        terminate();
     }
 
     private void downloadPacket(DatagramPacket packet) {
         boolean downloadComplete = Tools.processDownloadPacket(packet, downloads, socket);
         if (downloadComplete) {
-            //if (downloads.size() + uploads.size() == 0) {
-            //  listen = false;
-            //}
             print("Download complete");
-//            askForTerminate(packet.getAddress());
+            terminate();
         }
     }
 
-    private void askForTerminate(InetAddress address) {
-/*        print("Terminate connection? (yes/no)");
-        Scanner scanner = new Scanner(System.in);
-        String answer = scanner.nextLine();
-        while (true) {
-            if (answer.equalsIgnoreCase("yes")) {
-                print("Disconnecting...");
-                break;
-            } else if (answer.equalsIgnoreCase("no")) {
-                upOrDown(address, scanner);
-                break;
-            } else {
-                print("Unknown answer, please provide 'yes' or 'no'.");
-                print("Terminate connection? (yes/no)");
-            }
-        }
-  */
+    private void terminate() {
         print("Terminating connection...");
         lt.stopListening();
     }
 
 
     private static void requestFile(String filename, InetAddress address) {
+        timerForReq = new Timer();
+        timerForReq.schedule(new TimerTask() {
+                           @Override
+                           public void run() {
+                                requestFile(filename, address);
+                           }
+                       },
+                Tools.getTimeOut()
+        );
         try {
             socket = new DatagramSocket();
         } catch (SocketException e) {
@@ -234,7 +215,6 @@ public class Client2 extends Thread implements Computer {
 
     }
 
-
     private void processList(byte[] data, InetAddress address) {
         boolean read = true;
         int filePointer = 1;
@@ -257,17 +237,14 @@ public class Client2 extends Thread implements Computer {
             }
         }
         print("Enter the name fo the file you want to download or press the return key to cancel.");
-        Scanner scanner = new Scanner(System.in);
         while (true) {
             String answer = scanner.nextLine();
             if (answer.isEmpty()) {
                 print("Cancelling download process.");
-                scanner.close();
                 break;
             } else if (fileNames.contains(answer)) {
                 print("Requesting " + answer);
                 requestFile(answer, address);
-                scanner.close();
                 break;
             } else {
                 print("Unknown file, try again.");

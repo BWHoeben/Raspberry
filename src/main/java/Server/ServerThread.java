@@ -9,7 +9,6 @@ import com.nedap.university.Computer;
 
 import java.io.*;
 import java.net.*;
-import java.nio.ByteBuffer;
 import java.util.*;
 
 public class ServerThread extends Thread implements Computer {
@@ -38,23 +37,6 @@ public class ServerThread extends Thread implements Computer {
 
     @Override
     public void run() {
-
-        String host = null;
-        try {
-            host = InetAddress.getLocalHost().toString();
-        } catch (UnknownHostException e) {
-            print(e.getMessage());
-        }
-        /*while (true) {
-            byte[] buf = new byte[Tools.getPacketLength()];
-            DatagramPacket packetReceived = new DatagramPacket(buf, buf.length);
-            try {
-                socket.receive(packetReceived);
-            } catch (IOException e) {
-                print(e.getMessage());
-            }
-            handlePacket(packetReceived);
-        }*/
         ListenThread lt = new ListenThread(socket, this);
         lt.start();
     }
@@ -70,7 +52,7 @@ public class ServerThread extends Thread implements Computer {
                 break;
             case Protocol.INITUP:
                 print("Client wants to upload.");
-                Tools.handleInitialPacket(packet, downloads, socket);
+                Tools.handleInitialPacket(packet, downloads, socket, null);
                 break;
             case Protocol.REQDOWN:
                 startUpload(packet);
@@ -83,15 +65,19 @@ public class ServerThread extends Thread implements Computer {
                 break;
             case Protocol.PAUSE:
                 print("Client wants to pauze file transfer.");
-                pauseTransfer(packet);
+                pauseTransfer(dataFromClient);
                 break;
             case Protocol.RESUME:
                 print("Client wants to resume file transfer.");
-                resumeTransfer(packet);
+                resumeTransfer(dataFromClient);
                 break;
-            case Protocol.ABORT:
-                print("Client wants to abort file transfer.");
-                abortTransfer(packet);
+            case Protocol.ABORTDOWN:
+                print("Client wants to abort upload.");
+                abortUp(dataFromClient);
+                break;
+            case Protocol.ABORTUP:
+                print("Clients wants to abort download.");
+                abortDown(dataFromClient);
                 break;
             case Protocol.HASHACK:
                 Tools.handleHashAck(hashThreads, dataFromClient);
@@ -99,6 +85,7 @@ public class ServerThread extends Thread implements Computer {
             case Protocol.HASH:
                 Tools.processHash(packet, downloads, socket);
                 break;
+
             default:
                 print("Received message does not adhere to protocol. Discarding message.");
                 break;
@@ -112,23 +99,26 @@ public class ServerThread extends Thread implements Computer {
         }
     }
 
-    private void abortTransfer(DatagramPacket packet) {
-        byte[] msg = packet.getData();
+    private void abortDown(byte[] msg) {
+        byte identifier = msg[1];
+        downloads.remove(identifier);
+    }
+
+    private void abortUp(byte[] msg) {
         byte identifier = msg[1];
         Upload upload = uploads.get(identifier);
         upload.abort();
         uploads.remove(identifier);
+        print("Upload aborted");
     }
 
-    private void resumeTransfer(DatagramPacket packet) {
-        byte[] msg = packet.getData();
+    private void resumeTransfer(byte[] msg) {
         byte identifier = msg[1];
         Upload upload = uploads.get(identifier);
         upload.resume();
     }
 
-    private void pauseTransfer(DatagramPacket packet) {
-        byte[] msg = packet.getData();
+    private void pauseTransfer(byte[] msg) {
         byte identifier = msg[1];
         Upload upload = uploads.get(identifier);
         upload.pause();
@@ -188,8 +178,7 @@ public class ServerThread extends Thread implements Computer {
     }
 
     private void listFiles(DatagramPacket packet, DatagramSocket socket) {
-        HashSet<String> fileNames = Tools.getFilenames();
-        //HashSet<String> fileNames = Tools.getFilenamesFromPi();
+        Set<String> fileNames = Tools.getFilenames();
         int bytesNeeded = 1;
         for (String fileName : fileNames) {
             bytesNeeded = bytesNeeded + 1 + fileName.getBytes().length;
