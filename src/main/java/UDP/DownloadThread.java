@@ -1,13 +1,8 @@
 package UDP;
 
-import com.sun.org.apache.xpath.internal.operations.String;
 
-import java.awt.*;
 import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
 
 public class DownloadThread extends Thread {
@@ -17,7 +12,7 @@ public class DownloadThread extends Thread {
     private Download download;
 
 
-    public DownloadThread(Map<Integer, byte[]> dataMap, File file, DataOutputStream dataOutputStream, Download download) {
+    public DownloadThread(Map<Integer, byte[]> dataMap, DataOutputStream dataOutputStream, Download download) {
         this.dataMap = dataMap;
         this.dataOutputStream = dataOutputStream;
         this.download = download;
@@ -33,7 +28,7 @@ public class DownloadThread extends Thread {
                         try {
                             dataOutputStream.write(fileContent);
                         } catch (IOException e) {
-                            e.printStackTrace();
+                            System.out.println(e.getMessage());
                         }
                     }
                 }

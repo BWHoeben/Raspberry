@@ -85,6 +85,7 @@ public class ServerThread extends Thread implements Computer {
             case Protocol.HASH:
                 Tools.processHash(packet, downloads, socket);
                 break;
+
             default:
                 print("Received message does not adhere to protocol. Discarding message.");
                 break;
@@ -177,8 +178,7 @@ public class ServerThread extends Thread implements Computer {
     }
 
     private void listFiles(DatagramPacket packet, DatagramSocket socket) {
-        HashSet<String> fileNames = Tools.getFilenames();
-        //HashSet<String> fileNames = Tools.getFilenamesFromPi();
+        Set<String> fileNames = Tools.getFilenames();
         int bytesNeeded = 1;
         for (String fileName : fileNames) {
             bytesNeeded = bytesNeeded + 1 + fileName.getBytes().length;

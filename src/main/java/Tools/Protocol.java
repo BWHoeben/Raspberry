@@ -2,6 +2,10 @@ package Tools;
 
 public class Protocol {
 
+    private Protocol() {
+
+    }
+
     /*
     Protocol for first byte:
 

@@ -2,7 +2,6 @@ package UDP;
 
 import Client.InputThread;
 import Tools.Tools;
-import com.sun.org.apache.xpath.internal.operations.String;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -40,7 +39,7 @@ public class Download extends FileTransfer {
             dataMap.put(pktNum, data);
             if (!isComplete) {
                 if (!dt.isAlive()) {
-                    dt = new DownloadThread(dataMap, file, dataOutputStream, this);
+                    dt = new DownloadThread(dataMap, dataOutputStream, this);
                     dt.start();
                 }
             } else {
@@ -52,7 +51,7 @@ public class Download extends FileTransfer {
                         print(e.getMessage());
                     }
                 }
-                dt = new DownloadThread(dataMap, file, dataOutputStream, this);
+                dt = new DownloadThread(dataMap, dataOutputStream, this);
                 dt.start();
                 try {
                     dt.join();
@@ -147,12 +146,11 @@ public class Download extends FileTransfer {
         } catch (Exception e) {
             print(e.getMessage());
         }
-        dt = new DownloadThread(dataMap, file, dataOutputStream, this);
+        dt = new DownloadThread(dataMap, dataOutputStream, this);
     }
 
     public void setParameters(java.lang.String fileName, byte identifier, int packetLength, int fileSize) {
-        //this.fileName = fileName;
-        this.fileName = "pic.txt";
+        this.fileName = fileName;
         this.identifier = identifier;
         this.pktsTransfered = new boolean[numberOfPkts];
         this.packetLength = packetLength;

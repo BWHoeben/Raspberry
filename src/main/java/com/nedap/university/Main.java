@@ -53,6 +53,6 @@ public class Main {
     }
 
     private static void print(String msg) {
-        System.out.println();
+        System.out.println(msg);
     }
 }

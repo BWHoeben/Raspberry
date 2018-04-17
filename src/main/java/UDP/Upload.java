@@ -5,7 +5,6 @@ import Tools.Tools;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -63,8 +62,8 @@ public class Upload extends FileTransfer {
     }
 
     public void initializeFileRead(String fileName) {
-        //String dir = "/home/pi/" + fileName;
-        String dir = fileName;
+        String dir = "/home/pi/" + fileName;
+        //String dir = fileName;
         this.fileSize = (int) new File(dir).length();
         this.numberOfPkts = (int) Math.ceil((double) fileSize / (packetLength - 10)) + 1;
         try (FileChannel channel = new FileInputStream(dir).getChannel()) {
@@ -109,9 +108,7 @@ public class Upload extends FileTransfer {
         int bytesLeft = packetLength - header.length - 4;
         byte[] dataToSend;
         while (!dataMap.containsKey(packetNumber) && readUntill <= packetNumber) {
-            //for (int i = 0; i < slidingWindow; i++) {
             getPacket(bytesLeft);
-            //}
         }
         dataToSend = dataMap.get(packetNumber);
         if (dataToSend != null) {
@@ -223,8 +220,8 @@ public class Upload extends FileTransfer {
     }
 
     public void setParameters(String fileName, byte identifier, int packetLength) {
-        //this.fileName = fileName;
-        this.fileName = "pic.txt";
+        this.fileName = fileName;
+        //this.fileName = "pic.txt";
         this.identifier = identifier;
         this.pktsTransfered = new boolean[numberOfPkts];
         this.packetLength = packetLength;

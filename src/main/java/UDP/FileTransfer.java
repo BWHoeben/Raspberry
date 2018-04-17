@@ -1,10 +1,5 @@
 package UDP;
 
-import sun.security.krb5.internal.crypto.Des;
-
-import java.io.File;
-import java.io.FileOutputStream;
-
 public abstract class FileTransfer {
 
     protected String fileName;
