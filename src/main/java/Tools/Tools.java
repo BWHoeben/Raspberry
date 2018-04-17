@@ -232,9 +232,10 @@ public class Tools {
                 } else {
                     return false;
                 }
-        } else {
-            return false;
-        }
+
+            } else {
+                return false;
+            }
     }
 
     public static void processAcknowledgement(DatagramPacket packet, Map<Byte, Upload> uploads) {

@@ -108,7 +108,7 @@ public class Upload extends FileTransfer {
         int bytesLeft = packetLength - header.length - 4;
         byte[] dataToSend;
         while (!dataMap.containsKey(packetNumber) && readUntill <= packetNumber) {
-                getPacket(bytesLeft);
+            getPacket(bytesLeft);
         }
         dataToSend = dataMap.get(packetNumber);
         if (dataToSend != null) {

@@ -251,5 +251,4 @@ public class Client2 implements Computer {
             }
         }
     }
-
 }
