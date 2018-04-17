@@ -1,15 +1,12 @@
 package Tools;
 
 import Client.InputThread;
-import Client.ListenThread;
 import UDP.Destination;
 import UDP.Download;
 import UDP.Upload;
 
 import java.io.*;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.util.*;
@@ -20,9 +17,16 @@ import java.io.IOException;
 
 public class Tools {
 
-    private static int packetLength = 65000;//65000
-    private static int slidingWindow = 25;//25;
-    private static int timeOut = 1000; //1000;
+    /*
+        Recommended values:
+            packetLength    =   65000
+            slidingWindow   =      25
+            timeOut         =    1000
+     */
+
+    private static int packetLength = 65000;
+    private static int slidingWindow = 25;
+    private static int timeOut = 1000;
     private static int port = 12555;
 
     private Tools() {
@@ -72,25 +76,15 @@ public class Tools {
         return returnArray;
     }
 
-    public static HashSet<String> getFilenamesFromPi() {
-        File folder = new File(System.getProperty("user.dir") + "/home/pi/");
-        File[] listOfFiles = folder.listFiles();
-        HashSet<String> set = new HashSet<>();
-        for (int i = 0; i < listOfFiles.length; i++) {
-            if (listOfFiles[i].isFile()) {
-                set.add(listOfFiles[i].getName());
-            }
-        }
-        return set;
-    }
-
-    public static HashSet<String> getFilenames() {
+    public static Set<String> getFilenames() {
         File folder = new File(System.getProperty("user.dir"));
         File[] listOfFiles = folder.listFiles();
         HashSet<String> set = new HashSet<>();
-        for (int i = 0; i < listOfFiles.length; i++) {
-            if (listOfFiles[i].isFile()) {
-                set.add(listOfFiles[i].getName());
+        if (listOfFiles != null) {
+            for (File file : listOfFiles) {
+                if (file.isFile()) {
+                    set.add(file.getName());
+                }
             }
         }
         return set;
@@ -98,7 +92,7 @@ public class Tools {
 
     public static byte[] createInitialPacketContentForUpload(String fileName, Destination destination,
                                                              DatagramSocket socket,
-                                                             Map<Byte, Upload> uploads, HashMap<Byte, HandleHashThread> hashThreads) {
+                                                             Map<Byte, Upload> uploads, Map<Byte, HandleHashThread> hashThreads) {
         Upload upload = new Upload(destination);
         byte identifier = getIdentifierForUpload(uploads);
 
@@ -247,19 +241,21 @@ public class Tools {
         int pktNumber = ByteBuffer.wrap(pktNum).getInt();
         if (uploads.containsKey(identifier)) {
             Upload upload = uploads.get(identifier);
-            if (pktNumber != 0 && upload != null) {
-                upload.cancelTimerForPacket(pktNumber);
-            }
-            //print("Acknowledgement received. Packet#: " + pktNumber + " Identifier: " + identifier);
-            upload.pktTransferred(pktNumber);
-            upload.acknowledgePacket(pktNumber);
-            if (upload.isComplete()) {
-                upload.cancelAllTimers();
-                print("Upload completed!");
-                print("Time outs: " + upload.getTimeOuts());
-                uploads.remove(identifier);
-            } else {
-                upload.continueUpload();
+            if (upload!= null) {
+                if (pktNumber != 0) {
+                    upload.cancelTimerForPacket(pktNumber);
+                }
+                //print("Acknowledgement received. Packet#: " + pktNumber + " Identifier: " + identifier);
+                upload.pktTransferred(pktNumber);
+                upload.acknowledgePacket(pktNumber);
+                if (upload.isComplete()) {
+                    upload.cancelAllTimers();
+                    print("Upload completed!");
+                    print("Time outs: " + upload.getTimeOuts());
+                    uploads.remove(identifier);
+                } else {
+                    upload.continueUpload();
+                }
             }
         }
     }
@@ -278,10 +274,7 @@ public class Tools {
 
                 return md5Digest.digest();
             }
-        } catch (IOException e) {
-            print(e.getMessage());
-            return new byte[0];
-        } catch (NoSuchAlgorithmException e) {
+        } catch (IOException | NoSuchAlgorithmException e) {
             print(e.getMessage());
             return new byte[0];
         }
@@ -327,4 +320,31 @@ public class Tools {
         return new File(filename).exists();
     }
 
+    public static InetAddress getRaspberryAddress(int lower, int upper) {
+        String subnet = "192.168.1.";
+        InetAddress myOwnAddress = null;
+        try {
+            myOwnAddress = InetAddress.getLocalHost();
+        } catch (UnknownHostException e) {
+            print(e.getMessage());
+        }
+
+        for (int i = lower; i <= upper; i++) {
+            String host = subnet + i;
+            try {
+                InetAddress inetAddress = InetAddress.getByName(host);
+                if (inetAddress.isReachable(timeOut) && !inetAddress.equals(myOwnAddress)) {
+                    return inetAddress;
+                }
+            } catch (IOException e) {
+                print(e.getMessage());
+            }
+        }
+        try {
+            return InetAddress.getLocalHost();
+        } catch (UnknownHostException e) {
+            print(e.getMessage());
+        }
+        return myOwnAddress;
+    }
 }
