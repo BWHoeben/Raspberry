@@ -12,6 +12,10 @@ import Tools.Tools;
 public class Test2 {
 
     public static void main(String[] args) throws IOException, NoSuchAlgorithmException {
+        File file = new File("test.txt");
+
+        System.out.println(file.exists());
+
         /*File fileTest = new File("test.txt");
         File filePic1 = new File("picture1.bmp");
         File filePic2 = new File("picture1.bmp");
@@ -23,14 +27,14 @@ public class Test2 {
         byte[] pic1Byte = pic1.getBytes();
         byte[] pic2Byte = pic2.getBytes();
 
-        System.out.println(new String(pic1Byte).equals(new String(pic2Byte)));*/
+        System.out.println(new String(pic1Byte).equals(new String(pic2Byte)));
 
         byte[] test  = Tools.getHash("test.txt");
         byte[] pic1  = Tools.getHash("picture1.bmp");
         byte[] pic2  = Tools.getHash("picture2.bmp");
         System.out.println(Arrays.equals(test, pic1));
         System.out.println(Arrays.equals(pic2, pic1));
-
+        */
     }
 
     private static String getFileChecksum(MessageDigest digest, File file) throws IOException

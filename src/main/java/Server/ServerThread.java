@@ -1,16 +1,17 @@
 package Server;
 
+import Client.ListenThread;
 import Tools.HandleHashThread;
 import Tools.Protocol;
 import Tools.Tools;
 import UDP.*;
+import com.nedap.university.Computer;
 
 import java.io.*;
 import java.net.*;
-import java.nio.ByteBuffer;
 import java.util.*;
 
-public class ServerThread extends Thread {
+public class ServerThread extends Thread implements Computer {
 
     private DatagramSocket socket;
     private HashMap<Byte, Download> downloads = new HashMap<>();
@@ -21,7 +22,7 @@ public class ServerThread extends Thread {
         this("BWH");
     }
 
-    private ServerThread(String name) throws IOException {
+    private ServerThread(String name) {
         super(name);
 
         int port = Tools.getPort();
@@ -36,27 +37,12 @@ public class ServerThread extends Thread {
 
     @Override
     public void run() {
-
-        String host = null;
-        try {
-            host = InetAddress.getLocalHost().toString();
-        } catch (UnknownHostException e) {
-            print(e.getMessage());
-        }
-        print("Localhost = " + host);
-        while (true) {
-            byte[] buf = new byte[Tools.getPacketLength()];
-            DatagramPacket packetReceived = new DatagramPacket(buf, buf.length);
-            try {
-                socket.receive(packetReceived);
-            } catch (IOException e) {
-                print(e.getMessage());
-            }
-            handlePacketFromClient(packetReceived, socket);
-        }
+        ListenThread lt = new ListenThread(socket, this);
+        lt.start();
     }
 
-    private void handlePacketFromClient(DatagramPacket packet, DatagramSocket socket) {
+    @Override
+    public void handlePacket(DatagramPacket packet) {
         byte[] dataFromClient = packet.getData();
         byte firstByte = dataFromClient[0];
         switch (firstByte) {
@@ -66,7 +52,7 @@ public class ServerThread extends Thread {
                 break;
             case Protocol.INITUP:
                 print("Client wants to upload.");
-                Tools.handleInitialPacket(packet, downloads, socket);
+                Tools.handleInitialPacket(packet, downloads, socket, null);
                 break;
             case Protocol.REQDOWN:
                 startUpload(packet);
@@ -79,21 +65,25 @@ public class ServerThread extends Thread {
                 break;
             case Protocol.PAUSE:
                 print("Client wants to pauze file transfer.");
-                pauseTransfer(packet);
+                pauseTransfer(dataFromClient);
                 break;
             case Protocol.RESUME:
                 print("Client wants to resume file transfer.");
-                resumeTransfer(packet);
+                resumeTransfer(dataFromClient);
                 break;
-            case Protocol.ABORT:
-                print("Client wants to abort file transfer.");
-                abortTransfer(packet);
+            case Protocol.ABORTDOWN:
+                print("Client wants to abort upload.");
+                abortUp(dataFromClient);
+                break;
+            case Protocol.ABORTUP:
+                print("Clients wants to abort download.");
+                abortDown(dataFromClient);
                 break;
             case Protocol.HASHACK:
                 Tools.handleHashAck(hashThreads, dataFromClient);
                 break;
             case Protocol.HASH:
-                // todo
+                Tools.processHash(packet, downloads, socket);
                 break;
             default:
                 print("Received message does not adhere to protocol. Discarding message.");
@@ -108,23 +98,26 @@ public class ServerThread extends Thread {
         }
     }
 
-    private void abortTransfer(DatagramPacket packet) {
-        byte[] msg = packet.getData();
+    private void abortDown(byte[] msg) {
+        byte identifier = msg[1];
+        downloads.remove(identifier);
+    }
+
+    private void abortUp(byte[] msg) {
         byte identifier = msg[1];
         Upload upload = uploads.get(identifier);
         upload.abort();
         uploads.remove(identifier);
+        print("Upload aborted");
     }
 
-    private void resumeTransfer(DatagramPacket packet) {
-        byte[] msg = packet.getData();
+    private void resumeTransfer(byte[] msg) {
         byte identifier = msg[1];
         Upload upload = uploads.get(identifier);
         upload.resume();
     }
 
-    private void pauseTransfer(DatagramPacket packet) {
-        byte[] msg = packet.getData();
+    private void pauseTransfer(byte[] msg) {
         byte identifier = msg[1];
         Upload upload = uploads.get(identifier);
         upload.pause();
@@ -139,6 +132,7 @@ public class ServerThread extends Thread {
         }
         String fileName = new String(filenameBytes);
         print("Client requested: " + fileName);
+        if (Tools.fileExists(fileName)) {
         Destination destination = new Destination(packet.getPort(), packet.getAddress());
         byte[] packetContent = Tools.createInitialPacketContentForUpload(fileName, destination, socket, uploads, hashThreads);
         DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, packet.getAddress(), packet.getPort());
@@ -146,15 +140,24 @@ public class ServerThread extends Thread {
             socket.send(initialPacket);
         } catch (IOException e) {
             print(e.getMessage());
+        } } else {
+            sendInvalidReq(filenameBytes, filenameLengthIndicator, packet);
         }
+
     }
 
-    private void sendInvalidReq(DatagramPacket packet, byte[] filename, int fileLengthIndicator) {
-        byte[] packetToSend = new byte[Tools.getPacketLength()];
+    private void sendInvalidReq(byte[] filename, int fileLengthIndicator, DatagramPacket pkt) {
+        byte[] packetToSend = new byte[2 + fileLengthIndicator];
         packetToSend[0] = Protocol.INVALIDREQ;
         packetToSend[1] = (byte) fileLengthIndicator;
         for (int i = 0; i < fileLengthIndicator; i++) {
             packetToSend[2 + i] = filename[i];
+        }
+        DatagramPacket packet = new DatagramPacket(packetToSend, packetToSend.length, pkt.getAddress(), pkt.getPort());
+        try {
+            socket.send(packet);
+        } catch (IOException e) {
+            print(e.getMessage());
         }
     }
 
@@ -175,6 +178,7 @@ public class ServerThread extends Thread {
 
     private void listFiles(DatagramPacket packet, DatagramSocket socket) {
         HashSet<String> fileNames = Tools.getFilenames();
+        //HashSet<String> fileNames = Tools.getFilenamesFromPi();
         int bytesNeeded = 1;
         for (String fileName : fileNames) {
             bytesNeeded = bytesNeeded + 1 + fileName.getBytes().length;

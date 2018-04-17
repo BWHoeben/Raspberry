@@ -1,5 +1,6 @@
 package UDP;
 
+import Client.InputThread;
 import Tools.Tools;
 import com.sun.org.apache.xpath.internal.operations.String;
 
@@ -22,6 +23,8 @@ public class Download extends FileTransfer {
     private byte[] generatedHash;
     private byte[] receivedHash;
     private boolean hashReceived = false;
+    private boolean hashVerified = false;
+    private InputThread it;
 
     public Download() {
         this.packetLength = Tools.getPacketLength();
@@ -41,6 +44,7 @@ public class Download extends FileTransfer {
                     dt.start();
                 }
             } else {
+                print("All packets received. Still writing to file.");
                 while (dt.isAlive()) {
                     try {
                         Thread.sleep(10);
@@ -78,20 +82,23 @@ public class Download extends FileTransfer {
     }
 
     private void verifyHash() {
-        generateHash();
-        if (Arrays.equals(receivedHash, generatedHash)) {
-            print("Hashes match!");
-        } else {
-            print("Hashes don't match");
-            print("Received hash: " + new java.lang.String(receivedHash));
-            print("Generated hash: " + new java.lang.String(generatedHash));
+        if (!hashVerified) {
+            generateHash();
+            if (Arrays.equals(receivedHash, generatedHash)) {
+                hashVerified = true;
+                print("Hashes match!");
+            } else {
+                print("Hashes don't match");
+                print("Received hash: " + new java.lang.String(receivedHash));
+                print("Generated hash: " + new java.lang.String(generatedHash));
+            }
+            double elapsedTime = (double) System.nanoTime() - (double) time;
+            double timeInSec = elapsedTime / 1000000000.0;
+            print("Time elapsed: " + timeInSec + " seconds");
+            double speed = ((double) fileSize / 250000.0) / timeInSec;
+            print("Average speed: " + speed + " Mbps");
+            print("Redundant transmissions: " + doubles);
         }
-        double elapsedTime = (double) System.nanoTime() - (double) time;
-        double timeInSec = elapsedTime / 1000000000.0;
-        print("Time elapsed: " + timeInSec + " seconds");
-        double speed = ((double) fileSize / 250000.0) / timeInSec;
-        print("Average speed: " + speed + " Mbps");
-        print("Redundant transmissions: " + doubles);
     }
 
     public void processHash(byte[] hash) {
@@ -154,5 +161,13 @@ public class Download extends FileTransfer {
 
     private void print(java.lang.String msg) {
         System.out.println(msg);
+    }
+
+    public void setInputThread(InputThread it) {
+        this.it = it;
+    }
+
+    public InputThread getInputThread() {
+        return it;
     }
 }

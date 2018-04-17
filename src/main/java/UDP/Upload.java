@@ -69,8 +69,15 @@ public class Upload extends FileTransfer {
         this.numberOfPkts = (int) Math.ceil((double) fileSize / (packetLength - 10)) + 1;
         try (FileChannel channel = new FileInputStream(dir).getChannel()) {
             buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (IOException e1) {
+            dir = fileName;
+            this.fileSize = (int) new File(dir).length();
+            this.numberOfPkts = (int) Math.ceil((double) fileSize / (packetLength - 10)) + 1;
+            try (FileChannel channel = new FileInputStream(dir).getChannel()) {
+                buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
+            } catch (IOException e2) {
+                print(e2.getMessage());
+            }
         }
     }
 
@@ -103,15 +110,15 @@ public class Upload extends FileTransfer {
         byte[] dataToSend;
         while (!dataMap.containsKey(packetNumber) && readUntill <= packetNumber) {
             //for (int i = 0; i < slidingWindow; i++) {
-                getPacket(bytesLeft);
-             //}
+            getPacket(bytesLeft);
+            //}
         }
         dataToSend = dataMap.get(packetNumber);
         if (dataToSend != null) {
-        int dataLengthIndicator = dataToSend.length;
-        byte[] dataLen = Tools.intToByteArray(dataLengthIndicator);
-        header = Tools.appendBytes(header, dataLen);
-        return Tools.appendBytes(header, dataToSend);
+            int dataLengthIndicator = dataToSend.length;
+            byte[] dataLen = Tools.intToByteArray(dataLengthIndicator);
+            header = Tools.appendBytes(header, dataLen);
+            return Tools.appendBytes(header, dataToSend);
         } else {
             return new byte[0];
         }
@@ -149,7 +156,7 @@ public class Upload extends FileTransfer {
             i++;
         }
         if (pktsSelected != numberOfPacketsToTransmit) {
-            packetsToReturn = Arrays.copyOfRange(packetsToReturn,0,pktsSelected);
+            packetsToReturn = Arrays.copyOfRange(packetsToReturn, 0, pktsSelected);
         }
         return packetsToReturn;
     }
@@ -167,7 +174,7 @@ public class Upload extends FileTransfer {
                         socket.send(packet);
                         setTimerForPacket(pktNumber);
                         states[pktNumber] = PacketState.SEND;
-                        print("Packet send: " + pktNumber);
+                        //print("Packet send: " + pktNumber);
                     } catch (IOException e) {
                         print(e.getMessage());
                     }
