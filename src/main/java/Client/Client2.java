@@ -11,6 +11,7 @@ import java.net.*;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Scanner;
+
 import Tools.HandleHashThread;
 import com.nedap.university.Computer;
 
@@ -20,6 +21,7 @@ public class Client2 extends Thread implements Computer {
     private HashMap<Byte, Download> downloads = new HashMap<>();
     private static HashMap<Byte, Upload> uploads = new HashMap<>();
     private static HashMap<Byte, HandleHashThread> hashThreads = new HashMap<>();
+    private static ListenThread lt;
 
     public Client2(DatagramSocket socket) {
         this.socket = socket;
@@ -86,9 +88,13 @@ public class Client2 extends Thread implements Computer {
                 print("Listing files...");
                 listFiles();
             } else {
-                startUpload(destination, answer);
-                scanner.close();
-                break;
+                if (Tools.fileExists(answer)) {
+                    startUpload(destination, answer);
+                    scanner.close();
+                    break;
+                } else {
+                    print("No such file. Try again.");
+                }
             }
         }
     }
@@ -109,7 +115,7 @@ public class Client2 extends Thread implements Computer {
             byte[] packetContent = Tools.createInitialPacketContentForUpload(filename, destination, socket, uploads, hashThreads);
             DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, destination.getAddress(), destination.getPort());
             socket.send(initialPacket);
-            ListenThread lt = new ListenThread(socket, new Client2(socket));
+            lt = new ListenThread(socket, new Client2(socket));
             lt.start();
         } catch (IOException e) {
             print(e.getMessage());
@@ -169,7 +175,7 @@ public class Client2 extends Thread implements Computer {
         boolean downloadComplete = Tools.processDownloadPacket(packet, downloads, socket);
         if (downloadComplete) {
             //if (downloads.size() + uploads.size() == 0) {
-              //  listen = false;
+            //  listen = false;
             //}
             print("Download complete");
 //            askForTerminate(packet.getAddress());
@@ -177,7 +183,7 @@ public class Client2 extends Thread implements Computer {
     }
 
     private void askForTerminate(InetAddress address) {
-        print("Terminate connection? (yes/no)");
+/*        print("Terminate connection? (yes/no)");
         Scanner scanner = new Scanner(System.in);
         String answer = scanner.nextLine();
         while (true) {
@@ -192,6 +198,9 @@ public class Client2 extends Thread implements Computer {
                 print("Terminate connection? (yes/no)");
             }
         }
+  */
+        print("Terminating connection...");
+        lt.stopListening();
     }
 
 
@@ -220,8 +229,9 @@ public class Client2 extends Thread implements Computer {
         } catch (IOException e) {
             print(e.getMessage());
         }
-        ListenThread lt = new ListenThread(socket, new Client2(socket));
+        lt = new ListenThread(socket, new Client2(socket));
         lt.start();
+
     }
 
 

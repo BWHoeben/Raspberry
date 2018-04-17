@@ -73,9 +73,7 @@ public class Tools {
         return returnArray;
     }
 
-    public static HashSet<String> getFilenames() {
-        // use this on one pi
-        //in = new BufferedReader(new FileReader("/home/pi/test.txt"));
+    public static HashSet<String> getFilenamesFromPi() {
         File folder = new File(System.getProperty("user.dir") + "/home/pi/");
         File[] listOfFiles = folder.listFiles();
         HashSet<String> set = new HashSet<>();
@@ -86,18 +84,18 @@ public class Tools {
         }
         return set;
     }
-/*
-    public static byte[] getFileContents(String fileName) throws IOException {
-        print("Start reading file...");
-            try (FileChannel channel = new FileInputStream("/home/pi/" + fileName).getChannel()) {
-                MappedByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
-                byte[] data = new byte[buffer.remaining()];
-                buffer.get(data);
-                return data;
-            }
-    }
-*/
 
+    public static HashSet<String> getFilenames() {
+        File folder = new File(System.getProperty("user.dir"));
+        File[] listOfFiles = folder.listFiles();
+        HashSet<String> set = new HashSet<>();
+        for (int i = 0; i < listOfFiles.length; i++) {
+            if (listOfFiles[i].isFile()) {
+                set.add(listOfFiles[i].getName());
+            }
+        }
+        return set;
+    }
 
     public static byte[] createInitialPacketContentForUpload(String fileName, Destination destination,
                                                              DatagramSocket socket,
@@ -304,7 +302,7 @@ public class Tools {
         }
     }
 
-    public static void handleHashAck(HashMap<Byte, HandleHashThread> hashThreads, byte[] data) {
+    public static void handleHashAck(Map<Byte, HandleHashThread> hashThreads, byte[] data) {
         byte identifier = data[1];
         HandleHashThread hht = hashThreads.get(identifier);
         hht.cancelTimerForHashPacket();
@@ -316,6 +314,10 @@ public class Tools {
 
     public static int getTimeOut() {
         return timeOut;
+    }
+
+    public static boolean fileExists(String filename) {
+        return new File(filename).exists();
     }
 
 }

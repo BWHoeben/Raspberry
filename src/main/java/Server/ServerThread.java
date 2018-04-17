@@ -143,6 +143,7 @@ public class ServerThread extends Thread implements Computer {
         }
         String fileName = new String(filenameBytes);
         print("Client requested: " + fileName);
+        if (Tools.fileExists(fileName)) {
         Destination destination = new Destination(packet.getPort(), packet.getAddress());
         byte[] packetContent = Tools.createInitialPacketContentForUpload(fileName, destination, socket, uploads, hashThreads);
         DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, packet.getAddress(), packet.getPort());
@@ -150,15 +151,24 @@ public class ServerThread extends Thread implements Computer {
             socket.send(initialPacket);
         } catch (IOException e) {
             print(e.getMessage());
+        } } else {
+            sendInvalidReq(filenameBytes, filenameLengthIndicator, packet);
         }
+
     }
 
-    private void sendInvalidReq(DatagramPacket packet, byte[] filename, int fileLengthIndicator) {
-        byte[] packetToSend = new byte[Tools.getPacketLength()];
+    private void sendInvalidReq(byte[] filename, int fileLengthIndicator, DatagramPacket pkt) {
+        byte[] packetToSend = new byte[2 + fileLengthIndicator];
         packetToSend[0] = Protocol.INVALIDREQ;
         packetToSend[1] = (byte) fileLengthIndicator;
         for (int i = 0; i < fileLengthIndicator; i++) {
             packetToSend[2 + i] = filename[i];
+        }
+        DatagramPacket packet = new DatagramPacket(packetToSend, packetToSend.length, pkt.getAddress(), pkt.getPort());
+        try {
+            socket.send(packet);
+        } catch (IOException e) {
+            print(e.getMessage());
         }
     }
 
@@ -179,6 +189,7 @@ public class ServerThread extends Thread implements Computer {
 
     private void listFiles(DatagramPacket packet, DatagramSocket socket) {
         HashSet<String> fileNames = Tools.getFilenames();
+        //HashSet<String> fileNames = Tools.getFilenamesFromPi();
         int bytesNeeded = 1;
         for (String fileName : fileNames) {
             bytesNeeded = bytesNeeded + 1 + fileName.getBytes().length;
