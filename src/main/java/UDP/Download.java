@@ -1,5 +1,6 @@
 package UDP;
 
+import Client.InputThread;
 import Tools.Tools;
 import com.sun.org.apache.xpath.internal.operations.String;
 
@@ -23,6 +24,7 @@ public class Download extends FileTransfer {
     private byte[] receivedHash;
     private boolean hashReceived = false;
     private boolean hashVerified = false;
+    private InputThread it;
 
     public Download() {
         this.packetLength = Tools.getPacketLength();
@@ -42,6 +44,7 @@ public class Download extends FileTransfer {
                     dt.start();
                 }
             } else {
+                print("All packets received. Still writing to file.");
                 while (dt.isAlive()) {
                     try {
                         Thread.sleep(10);
@@ -158,5 +161,13 @@ public class Download extends FileTransfer {
 
     private void print(java.lang.String msg) {
         System.out.println(msg);
+    }
+
+    public void setInputThread(InputThread it) {
+        this.it = it;
+    }
+
+    public InputThread getInputThread() {
+        return it;
     }
 }

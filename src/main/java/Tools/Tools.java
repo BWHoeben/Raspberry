@@ -1,5 +1,7 @@
 package Tools;
 
+import Client.InputThread;
+import Client.ListenThread;
 import UDP.Destination;
 import UDP.Download;
 import UDP.Upload;
@@ -10,10 +12,7 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
+import java.util.*;
 import java.security.NoSuchAlgorithmException;
 import java.io.File;
 import java.io.FileInputStream;
@@ -23,7 +22,7 @@ public class Tools {
 
     private static int packetLength = 65000;//65000
     private static int slidingWindow = 25;//25;
-    private static int timeOut = 1000;
+    private static int timeOut = 1000; //1000;
     private static int port = 12555;
 
     private Tools() {
@@ -149,7 +148,7 @@ public class Tools {
         return b;
     }
 
-    public static void handleInitialPacket(DatagramPacket packet, Map<Byte, Download> downloads, DatagramSocket socket) {
+    public static void handleInitialPacket(DatagramPacket packet, Map<Byte, Download> downloads, DatagramSocket socket, Scanner scanner) {
         byte[] data = packet.getData();
         byte[] numOfPkts = Arrays.copyOfRange(data, 1, 5);
         int totalPkts = ByteBuffer.wrap(numOfPkts).getInt();
@@ -171,10 +170,16 @@ public class Tools {
         download.setNumOfTotalPkts(totalPkts);
         download.setParameters(new String(fileName), identifier, Tools.getPacketLength(), fs);
         download.initializeWrite();
-        download.pktTransfered(0);
+        download.pktTransferred(0);
         downloads.put(identifier, download);
         sendAcknowledgement(packet.getAddress(), packet.getPort(), 0, (byte) identifier, socket);
         print("Downloading...");
+        if (scanner != null) {
+            Destination destination = new Destination(packet.getPort(), packet.getAddress());
+            InputThread<Download> it = new InputThread(scanner, identifier, destination, socket, download, downloads);
+            download.setInputThread(it);
+            it.start();
+        }
     }
 
     private static void sendAcknowledgement(InetAddress address, int port, int pktNumber, byte identifier, DatagramSocket socket) {
@@ -216,7 +221,7 @@ public class Tools {
         Tools.sendAcknowledgement(packet.getAddress(), packet.getPort(), pktNumber, identifier, socket);
         if (download != null) {
             //print("Server send packet " + pktNumber +  " for download " + identifier + " with size: " + packet.getData().length);
-            download.pktTransfered(pktNumber);
+            download.pktTransferred(pktNumber);
             byte[] dataLen = Arrays.copyOfRange(data, 6, 10);
             int dataLength = ByteBuffer.wrap(dataLen).getInt();
             byte[] receivedData = Arrays.copyOfRange(data, 10, 10 + dataLength);
@@ -225,12 +230,13 @@ public class Tools {
             // This method returns true if download is complete
             if (download.isComplete() && download.hasReceivedHash()) {
                 downloads.remove(identifier);
+                download.getInputThread().stopListening();
                 return true;
             } else {
                 return false;
             }
         } else {
-            return true;
+            return false;
         }
     }
 
@@ -239,20 +245,22 @@ public class Tools {
         byte identifier = data[1];
         byte[] pktNum = Arrays.copyOfRange(packet.getData(), 2, 6);
         int pktNumber = ByteBuffer.wrap(pktNum).getInt();
-        Upload upload = uploads.get(identifier);
-        if (pktNumber != 0 && upload != null) {
-            upload.cancelTimerForPacket(pktNumber);
-        }
-        //print("Acknowledgement received. Packet#: " + pktNumber + " Identifier: " + identifier);
-        upload.pktTransfered(pktNumber);
-        upload.acknowledgePacket(pktNumber);
-        if (upload.isComplete()) {
-            upload.cancelAllTimers();
-            print("Upload completed!");
-            print("Time outs: " + upload.getTimeOuts());
-            uploads.remove(identifier);
-        } else {
-            upload.continueUpload();
+        if (uploads.containsKey(identifier)) {
+            Upload upload = uploads.get(identifier);
+            if (pktNumber != 0 && upload != null) {
+                upload.cancelTimerForPacket(pktNumber);
+            }
+            //print("Acknowledgement received. Packet#: " + pktNumber + " Identifier: " + identifier);
+            upload.pktTransferred(pktNumber);
+            upload.acknowledgePacket(pktNumber);
+            if (upload.isComplete()) {
+                upload.cancelAllTimers();
+                print("Upload completed!");
+                print("Time outs: " + upload.getTimeOuts());
+                uploads.remove(identifier);
+            } else {
+                upload.continueUpload();
+            }
         }
     }
 
@@ -264,7 +272,7 @@ public class Tools {
                 byte[] byteArray = new byte[1024];
                 int bytesCount = 0;
 
-                while ((bytesCount = fis.read(byteArray)) != -1){
+                while ((bytesCount = fis.read(byteArray)) != -1) {
                     md5Digest.update(byteArray, 0, bytesCount);
                 }
 
@@ -280,14 +288,13 @@ public class Tools {
     }
 
 
-
     public static void processHash(DatagramPacket packet, Map<Byte, Download> downloads, DatagramSocket socket) {
         byte[] data = packet.getData();
         byte identifier = data[1];
         sendAcknowledgementForHash(packet.getAddress(), packet.getPort(), identifier, socket);
         byte[] hashIndicator = Arrays.copyOfRange(data, 2, 6);
         int hashLength = ByteBuffer.wrap(hashIndicator).getInt();
-        byte[] hash = Arrays.copyOfRange(data,6, 6 + hashLength);
+        byte[] hash = Arrays.copyOfRange(data, 6, 6 + hashLength);
         Download download;
         if (downloads.containsKey(identifier)) {
             download = downloads.get(identifier);

@@ -174,7 +174,7 @@ public class Upload extends FileTransfer {
                         socket.send(packet);
                         setTimerForPacket(pktNumber);
                         states[pktNumber] = PacketState.SEND;
-                        print("Packet send: " + pktNumber);
+                        //print("Packet send: " + pktNumber);
                     } catch (IOException e) {
                         print(e.getMessage());
                     }

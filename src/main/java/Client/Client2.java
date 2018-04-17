@@ -22,19 +22,20 @@ public class Client2 extends Thread implements Computer {
     private static HashMap<Byte, Upload> uploads = new HashMap<>();
     private static HashMap<Byte, HandleHashThread> hashThreads = new HashMap<>();
     private static ListenThread lt;
+    private InputThread it;
+    private static Scanner scanner = new Scanner(System.in);
 
     public Client2(DatagramSocket socket) {
         this.socket = socket;
     }
 
     public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-        InetAddress address = askForHost(scanner);
+        InetAddress address = askForHost();
         print("Inet address created.");
-        upOrDown(address, scanner);
+        upOrDown(address);
     }
 
-    private static InetAddress askForHost(Scanner scanner) {
+    private static InetAddress askForHost() {
         while (true) {
             try {
                 print("Provide host address or press the return key to use localhost.");
@@ -54,13 +55,13 @@ public class Client2 extends Thread implements Computer {
         System.out.println(msg);
     }
 
-    private static void upOrDown(InetAddress address, Scanner scanner) {
+    private static void upOrDown(InetAddress address) {
         while (true) {
             print("Download or upload? (u/d)");
             String answer = scanner.nextLine();
             if (answer.equalsIgnoreCase("u")) {
                 Destination destination = new Destination(Tools.getPort(), address);
-                upload(destination, scanner);
+                upload(destination);
                 break;
             } else if (answer.equalsIgnoreCase("d")) {
                 print("Please provide the name of the file you want to download or press the return key to get a list of available files...");
@@ -72,7 +73,6 @@ public class Client2 extends Thread implements Computer {
                     print("Requesting file: " + answer);
                     requestFile(answer, address);
                 }
-                scanner.close();
                 break;
             } else {
                 print("Unkown input. Please provide 'u' or 'd'.");
@@ -80,7 +80,7 @@ public class Client2 extends Thread implements Computer {
         }
     }
 
-    private static void upload(Destination destination, Scanner scanner) {
+    private static void upload(Destination destination) {
         while (true) {
             print("Enter the name of the file you want to upload or press the return key to list available files.");
             String answer = scanner.nextLine();
@@ -90,7 +90,6 @@ public class Client2 extends Thread implements Computer {
             } else {
                 if (Tools.fileExists(answer)) {
                     startUpload(destination, answer);
-                    scanner.close();
                     break;
                 } else {
                     print("No such file. Try again.");
@@ -114,17 +113,19 @@ public class Client2 extends Thread implements Computer {
             }
             byte[] packetContent = Tools.createInitialPacketContentForUpload(filename, destination, socket, uploads, hashThreads);
             DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, destination.getAddress(), destination.getPort());
+            byte identifier = packetContent[9];
             socket.send(initialPacket);
             lt = new ListenThread(socket, new Client2(socket));
             lt.start();
+            Upload upload = uploads.get(identifier);
+            InputThread<Upload> it = new InputThread<>(scanner, identifier, destination, socket, upload, uploads);
+            it.start();
         } catch (IOException e) {
             print(e.getMessage());
         }
     }
 
     public void handlePacket(DatagramPacket packet) {
-        //ListenThread lt = new ListenThread(socket, this);
-        //lt.start();
         byte[] data = packet.getData();
         byte ind = data[0];
         switch (ind) {
@@ -137,7 +138,7 @@ public class Client2 extends Thread implements Computer {
                 break;
             case Protocol.INITUP:
                 print("Server send initial packet for requested download");
-                Tools.handleInitialPacket(packet, downloads, socket);
+                Tools.handleInitialPacket(packet, downloads, socket, scanner);
                 //showOptions(packet);
                 break;
             case Protocol.ADDUP:
@@ -168,7 +169,7 @@ public class Client2 extends Thread implements Computer {
         }
         String fileName = new String(filenameBytes);
         print("Server was not able to retrieve file: " + fileName);
-        askForTerminate(packet.getAddress());
+        terminate();
     }
 
     private void downloadPacket(DatagramPacket packet) {
@@ -182,7 +183,7 @@ public class Client2 extends Thread implements Computer {
         }
     }
 
-    private void askForTerminate(InetAddress address) {
+    private void terminate() {
 /*        print("Terminate connection? (yes/no)");
         Scanner scanner = new Scanner(System.in);
         String answer = scanner.nextLine();
@@ -257,17 +258,14 @@ public class Client2 extends Thread implements Computer {
             }
         }
         print("Enter the name fo the file you want to download or press the return key to cancel.");
-        Scanner scanner = new Scanner(System.in);
         while (true) {
             String answer = scanner.nextLine();
             if (answer.isEmpty()) {
                 print("Cancelling download process.");
-                scanner.close();
                 break;
             } else if (fileNames.contains(answer)) {
                 print("Requesting " + answer);
                 requestFile(answer, address);
-                scanner.close();
                 break;
             } else {
                 print("Unknown file, try again.");

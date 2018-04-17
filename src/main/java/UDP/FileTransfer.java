@@ -33,11 +33,13 @@ public abstract class FileTransfer {
         return numberOfPkts;
     }
 
-    public void pktTransfered(int index) {
-        pktsTransfered[index] = true;
-        numberOfPktsTransfered++;
-        if (numberOfPkts == numberOfPktsTransfered) {
-            isComplete = true;
+    public void pktTransferred(int index) {
+        if (pktsTransfered != null) {
+            pktsTransfered[index] = true;
+            numberOfPktsTransfered++;
+            if (numberOfPkts == numberOfPktsTransfered) {
+                isComplete = true;
+            }
         }
     }
 
