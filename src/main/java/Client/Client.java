@@ -14,7 +14,7 @@ import java.util.*;
 import Tools.HandleHashThread;
 import com.nedap.university.Computer;
 
-public class Client2 implements Computer {
+public class Client implements Computer {
 
     private static DatagramSocket socket;
     private HashMap<Byte, Download> downloads = new HashMap<>();
@@ -26,7 +26,7 @@ public class Client2 implements Computer {
 
     private static Scanner scanner = new Scanner(System.in);
 
-    private Client2(DatagramSocket socket) {
+    private Client(DatagramSocket socket) {
         this.socket = socket;
     }
 
@@ -100,7 +100,7 @@ public class Client2 implements Computer {
             DatagramPacket initialPacket = new DatagramPacket(packetContent, packetContent.length, destination.getAddress(), destination.getPort());
             byte identifier = packetContent[9];
             socket.send(initialPacket);
-            lt = new ListenThread(socket, new Client2(socket));
+            lt = new ListenThread(socket, new Client(socket));
             lt.start();
             Upload upload = uploads.get(identifier);
             it = new InputThread<>(scanner, identifier, destination, socket, upload, uploads);
@@ -217,7 +217,7 @@ public class Client2 implements Computer {
         } catch (IOException e) {
             print(e.getMessage());
         }
-        lt = new ListenThread(socket, new Client2(socket));
+        lt = new ListenThread(socket, new Client(socket));
         lt.start();
 
     }
