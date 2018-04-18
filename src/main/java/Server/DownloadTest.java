@@ -68,11 +68,12 @@ public class DownloadTest {
                         assertTrue(downloadPacket(packet));
                     }
                 }
-        } catch(IOException e){
-            e.printStackTrace();
+            } catch(IOException e){
+                e.printStackTrace();
+            }
         }
-    }
         System.out.println("Done");
+    }
 }
 
     // return true if download complete

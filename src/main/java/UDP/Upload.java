@@ -171,7 +171,7 @@ public class Upload extends FileTransfer {
                         socket.send(packet);
                         setTimerForPacket(pktNumber);
                         states[pktNumber] = PacketState.SEND;
-                        print("Packet send: " + pktNumber);
+                        //print("Packet send: " + pktNumber);
                     } catch (IOException e) {
                         print(e.getMessage());
                     }
@@ -195,8 +195,10 @@ public class Upload extends FileTransfer {
         timer.schedule(new TimerTask() {
                            @Override
                            public void run() {
-                               print("Packet " + packetNumber + " timed out. Indentifier: " + identifier);
-                               timeOuts++;
+                               if (!aborted) {
+                                   print("Packet " + packetNumber + " timed out. Indentifier: " + identifier);
+                                   timeOuts++;
+                               }
                                states[packetNumber] = PacketState.TIMEDOUT;
                                continueUpload();
                            }

@@ -223,7 +223,7 @@ public class Tools {
         if (download != null) {
             download.pktTransferred(pktNumber);
             byte[] dataLen = Arrays.copyOfRange(data, 6, 10);
-            print("Received packet " + pktNumber +  " for download " + identifier);
+            //print("Received packet " + pktNumber +  " for download " + identifier);
             int dataLength = ByteBuffer.wrap(dataLen).getInt();
             byte[] receivedData = Arrays.copyOfRange(data, 10, 10 + dataLength);
             download.addData(pktNumber, receivedData);
@@ -243,7 +243,7 @@ public class Tools {
             }
     }
 
-    public static void processAcknowledgement(DatagramPacket packet, Map<Byte, Upload> uploads) {
+    public static boolean processAcknowledgement(DatagramPacket packet, Map<Byte, Upload> uploads) {
         byte[] data = packet.getData();
         byte identifier = data[1];
         byte[] pktNum = Arrays.copyOfRange(packet.getData(), 2, 6);
@@ -263,11 +263,13 @@ public class Tools {
                     print("Upload completed! Elapsed time: " + elapsedTime);
                     print("Time outs: " + upload.getTimeOuts());
                     uploads.remove(identifier);
+                    return true;
                 } else {
                     upload.continueUpload();
                 }
             }
         }
+        return false;
     }
 
     public static byte[] getHash(String filename) {
