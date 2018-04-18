@@ -21,7 +21,7 @@ public class Client2 implements Computer {
     private static HashMap<Byte, Upload> uploads = new HashMap<>();
     private static HashMap<Byte, HandleHashThread> hashThreads = new HashMap<>();
     private static ListenThread lt;
-    private static Timer timerForReq;
+    private static Timer  timerForReq;
 
     private static Scanner scanner = new Scanner(System.in);
 

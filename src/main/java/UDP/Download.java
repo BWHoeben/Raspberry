@@ -13,11 +13,9 @@ import java.util.Map;
 public class Download extends FileTransfer {
 
     private Map<Integer, byte[]> dataMap = new HashMap<>();
-    private File file;
     private DataOutputStream dataOutputStream;
     private DownloadThread dt;
     private int writtenUntil = 0;
-    private long time;
     private int doubles;
     private byte[] generatedHash;
     private byte[] receivedHash;
@@ -27,7 +25,7 @@ public class Download extends FileTransfer {
 
     public Download() {
         this.packetLength = Tools.getPacketLength();
-        time = System.nanoTime();
+        this.time = System.nanoTime();
     }
 
     public boolean hasReceivedHash() {
@@ -43,36 +41,31 @@ public class Download extends FileTransfer {
                     dt.start();
                 }
             } else {
-                print("All packets received. Still writing to file.");
-                while (dt.isAlive()) {
-                    try {
-                        Thread.sleep(10);
-                    } catch (InterruptedException e) {
-                        print(e.getMessage());
-                    }
-                }
-                dt = new DownloadThread(dataMap, dataOutputStream, this);
-                dt.start();
-                try {
-                    dt.join();
-                } catch (InterruptedException e) {
-                    print(e.getMessage());
-                }
-
-                try {
-                    dataOutputStream.flush();
-                    dataOutputStream.close();
-                } catch (IOException e) {
-                    print(e.getMessage());
-                }
-                if (hashReceived) {
-                    verifyHash();
-                } else {
-                    print("Download complete but waiting for hash.");
-                }
+                finishWriting();
             }
-        } else{
+        } else {
             doubles++;
+        }
+    }
+
+    private void finishWriting() {
+        try {
+            print("All packets received. Still writing to file.");
+            if (dt.isAlive()) {
+                dt.join();
+            }
+            dt = new DownloadThread(dataMap, dataOutputStream, this);
+            dt.start();
+            dt.join();
+            dataOutputStream.flush();
+            dataOutputStream.close();
+            if (hashReceived) {
+                verifyHash();
+            } else {
+                print("Download complete but waiting for hash.");
+            }
+        } catch (IOException | InterruptedException e) {
+            print(e.getMessage());
         }
     }
 
@@ -91,13 +84,17 @@ public class Download extends FileTransfer {
                 print("Received hash: " + new java.lang.String(receivedHash));
                 print("Generated hash: " + new java.lang.String(generatedHash));
             }
-            double elapsedTime = (double) System.nanoTime() - (double) time;
-            double timeInSec = elapsedTime / 1000000000.0;
-            print("Time elapsed: " + timeInSec + " seconds");
-            double speed = ((double) fileSize / 250000.0) / timeInSec;
-            print("Average speed: " + speed + " Mbps");
-            print("Redundant transmissions: " + doubles);
+            printStats();
         }
+    }
+
+    private void printStats() {
+        double elapsedTime = (double) System.nanoTime() - (double) time;
+        double timeInSec = elapsedTime / 1000000000.0;
+        print("Time elapsed: " + timeInSec + " seconds");
+        double speed = ((double) fileSize / 250000.0) / timeInSec;
+        print("Average speed: " + speed + " Mbps");
+        print("Redundant transmissions: " + doubles);
     }
 
     public void processHash(byte[] hash) {
@@ -120,7 +117,7 @@ public class Download extends FileTransfer {
         removeProcessedDataFromMemory(writtenUntil);
     }
 
-    public void removeProcessedDataFromMemory(int until) {
+    private void removeProcessedDataFromMemory(int until) {
         int i = 0;
         while (i <= until) {
             dataMap.remove(i);
@@ -134,15 +131,11 @@ public class Download extends FileTransfer {
 
     public void initializeWrite() {
         dataMap.put(0, new byte[0]);
-        file = new File(fileName);
+        new File(fileName);
         try {
-            try {
-                dataOutputStream = new DataOutputStream(
-                        new BufferedOutputStream(
-                                Files.newOutputStream(Paths.get(fileName))));
-            } catch (IOException e) {
-                print(e.getMessage());
-            }
+            dataOutputStream = new DataOutputStream(
+                    new BufferedOutputStream(
+                            Files.newOutputStream(Paths.get(fileName))));
         } catch (Exception e) {
             print(e.getMessage());
         }
@@ -150,7 +143,7 @@ public class Download extends FileTransfer {
     }
 
     public void setParameters(java.lang.String fileName, byte identifier, int packetLength, int fileSize) {
-        this.fileName = "pic.txt";
+        this.fileName = fileName;
         this.identifier = identifier;
         this.pktsTransfered = new boolean[numberOfPkts];
         this.packetLength = packetLength;

@@ -1,27 +1,39 @@
 package Test;
+import Tools.Tools;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Random;
 
 public class Test {
-
+    private static MappedByteBuffer buffer;
     public Test() {
 
     }
 
     public static void main(String[] args) {
-        byte[] array = new byte[2];
-        new Random().nextBytes(array);
-
-        MessageDigest md5Digest = null;
-        try {
-            md5Digest = MessageDigest.getInstance("MD5");
-        } catch (NoSuchAlgorithmException e) {
-            print(e.getMessage());
+        String fileName = "berg.bmp";
+        String dir = System.getProperty("user.dir") + "/home/pi/" + fileName;
+        print(System.getProperty("user.dir"));
+        int fileSize = (int) new File(dir).length();
+        int numberOfPkts = (int) Math.ceil((double) fileSize / (Tools.getPacketLength() - 10)) + 1;
+        try (FileChannel channel = new FileInputStream(dir).getChannel()) {
+            buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
+        } catch (IOException e1) {
+            dir = fileName;
+            fileSize = (int) new File(dir).length();
+            numberOfPkts = (int) Math.ceil((double) fileSize / (Tools.getPacketLength() - 10)) + 1;
+            try (FileChannel channel = new FileInputStream(dir).getChannel()) {
+                buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
+            } catch (IOException e2) {
+                print(e2.getMessage());
+            }
         }
-        byte[] hash = md5Digest.digest(array);
-        print("Hash length: " + hash.length);
-        print("Array length: " + array.length);
     }
 
 

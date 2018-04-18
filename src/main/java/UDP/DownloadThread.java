@@ -20,20 +20,25 @@ public class DownloadThread extends Thread {
 
     @Override
     public void run() {
-            int writtenUntill = download.getWrittenUntil();
-            while (download.completeUntill() > writtenUntill) {
-                byte[] array = dataMap.get(writtenUntill);
+            int writtenUntil = download.getWrittenUntil();
+            while (download.completeUntill() - 1 > writtenUntil) {
+                byte[] array = dataMap.get(writtenUntil + 1);
                 if (array != null) {
-                    for (byte fileContent : array) {
-                        try {
-                            dataOutputStream.write(fileContent);
-                        } catch (IOException e) {
-                            System.out.println(e.getMessage());
-                        }
+                    try {
+                        dataOutputStream.write(array);
+                        writtenUntil++;
+                    } catch (IOException e) {
+                        print(e.getMessage());
                     }
+                } else {
+                    print("Attempting to write packet " + writtenUntil + " but no data found.");
+                    break;
                 }
-                writtenUntill++;
             }
-            download.updateWrittenUntil(writtenUntill);
+            download.updateWrittenUntil(writtenUntil);
+    }
+
+    private void print(String msg) {
+        System.out.println(msg);
     }
 }

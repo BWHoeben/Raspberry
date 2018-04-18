@@ -30,6 +30,7 @@ public class Upload extends FileTransfer {
     public Upload(Destination destination) {
         this.destination = destination;
         this.packetLength = Tools.getPacketLength();
+        this.time = System.nanoTime();
     }
 
     public void initialize(DatagramSocket socket, int slidingWindow, int timeOut) {
@@ -62,14 +63,13 @@ public class Upload extends FileTransfer {
     }
 
     public void initializeFileRead(String fileName) {
-        String dir = "/home/pi/" + fileName;
-        //String dir = fileName;
+        String dir = System.getProperty("user.dir") + "/home/pi/" + fileName;
         this.fileSize = (int) new File(dir).length();
         this.numberOfPkts = (int) Math.ceil((double) fileSize / (packetLength - 10)) + 1;
         try (FileChannel channel = new FileInputStream(dir).getChannel()) {
             buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size());
         } catch (IOException e1) {
-            dir = fileName;
+            dir = System.getProperty("user.dir") + "/" + fileName;
             this.fileSize = (int) new File(dir).length();
             this.numberOfPkts = (int) Math.ceil((double) fileSize / (packetLength - 10)) + 1;
             try (FileChannel channel = new FileInputStream(dir).getChannel()) {
@@ -171,7 +171,7 @@ public class Upload extends FileTransfer {
                         socket.send(packet);
                         setTimerForPacket(pktNumber);
                         states[pktNumber] = PacketState.SEND;
-                        //print("Packet send: " + pktNumber);
+                        print("Packet send: " + pktNumber);
                     } catch (IOException e) {
                         print(e.getMessage());
                     }
@@ -225,5 +225,11 @@ public class Upload extends FileTransfer {
         this.identifier = identifier;
         this.pktsTransfered = new boolean[numberOfPkts];
         this.packetLength = packetLength;
+    }
+
+    public double elapsedTime() {
+        double elapsedTime = (double) System.nanoTime() - (double) time;
+        double timeInSec = elapsedTime / 1000000000.0;
+        return  timeInSec;
     }
 }

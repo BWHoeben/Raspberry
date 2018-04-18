@@ -46,7 +46,7 @@ public class HandleHashThread extends Thread {
         try {
             socket.send(dp);
         } catch (IOException e) {
-            System.out.println(e.getMessage());
+            print(e.getMessage());
         }
         createTimerForHashPacket();
     }
@@ -56,7 +56,7 @@ public class HandleHashThread extends Thread {
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                System.out.println("Hash packet timed out");
+                print("Hash packet timed out");
                 Destination destination = new Destination(port, address);
                 hht = new HandleHashThread(filename, destination, socket, identifier);
                 hht.start();
@@ -74,5 +74,9 @@ public class HandleHashThread extends Thread {
                 hht.cancelTimerForHashPacket();
             }
         }
+    }
+
+    private void print(String msg) {
+        System.out.println(msg);
     }
 }

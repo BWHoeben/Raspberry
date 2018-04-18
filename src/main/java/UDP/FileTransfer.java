@@ -10,6 +10,7 @@ public abstract class FileTransfer {
     protected boolean[] pktsTransfered;
     protected int numberOfPktsTransfered;
     protected int packetLength;
+    protected long time;
 
     public FileTransfer() {
 

@@ -77,8 +77,13 @@ public class Tools {
     }
 
     public static Set<String> getFilenames() {
-        File folder = new File(System.getProperty("user.dir"));
+        File folder = new File(System.getProperty("user.dir") + "/home/pi/");
         File[] listOfFiles = folder.listFiles();
+        if (listOfFiles == null) {
+            folder = new File(System.getProperty("user.dir"));
+            listOfFiles = folder.listFiles();
+        }
+
         HashSet<String> set = new HashSet<>();
         if (listOfFiles != null) {
             for (File file : listOfFiles) {
@@ -218,7 +223,7 @@ public class Tools {
         if (download != null) {
             download.pktTransferred(pktNumber);
             byte[] dataLen = Arrays.copyOfRange(data, 6, 10);
-            //print("Server send packet " + pktNumber +  " for download " + identifier + " with size: " + packet.getData().length);
+            print("Received packet " + pktNumber +  " for download " + identifier);
             int dataLength = ByteBuffer.wrap(dataLen).getInt();
             byte[] receivedData = Arrays.copyOfRange(data, 10, 10 + dataLength);
             download.addData(pktNumber, receivedData);
@@ -254,7 +259,8 @@ public class Tools {
                 upload.acknowledgePacket(pktNumber);
                 if (upload.isComplete()) {
                     upload.cancelAllTimers();
-                    print("Upload completed!");
+                    double elapsedTime = upload.elapsedTime();
+                    print("Upload completed! Elapsed time: " + elapsedTime);
                     print("Time outs: " + upload.getTimeOuts());
                     uploads.remove(identifier);
                 } else {
@@ -266,7 +272,19 @@ public class Tools {
 
     public static byte[] getHash(String filename) {
         try {
-            File file = new File(filename);
+            String dir = System.getProperty("user.dir") + "/home/pi/" + filename;
+            File file = new File(dir);
+
+            if (!file.exists()) {
+                dir = System.getProperty("user.dir") + "/" + filename;
+                file = new File(dir);
+            }
+            if (!file.exists()) {
+                print("Could not generate hash.");
+                return new byte[0];
+            }
+
+
             MessageDigest md5Digest = MessageDigest.getInstance("MD5");
             try (FileInputStream fis = new FileInputStream(file)) {
                 byte[] byteArray = new byte[1024];
@@ -320,7 +338,7 @@ public class Tools {
     }
 
     public static boolean fileExists(String filename) {
-        return new File(filename).exists();
+        return new File(System.getProperty("user.dir") + "/home/pi/" + filename).exists() || new File(System.getProperty("user.dir") + "/" + filename).exists();
     }
 
     public static InetAddress getRaspberryAddress(int lower, int upper) {
