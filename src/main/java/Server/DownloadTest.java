@@ -74,6 +74,7 @@ public class DownloadTest {
         }
         System.out.println("Done");
     }
+}
 
     // return true if download complete
     private boolean downloadPacket(DatagramPacket packet) {
