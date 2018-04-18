@@ -142,6 +142,7 @@ public class ServerThread extends Thread implements Computer {
         } catch (IOException e) {
             print(e.getMessage());
         } } else {
+            print("Client requested a file that does not exist.");
             sendInvalidReq(filenameBytes, filenameLengthIndicator, packet);
         }
 

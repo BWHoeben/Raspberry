@@ -77,8 +77,13 @@ public class Tools {
     }
 
     public static Set<String> getFilenames() {
-        File folder = new File(System.getProperty("user.dir"));
+        File folder = new File(System.getProperty("user.dir") + "/home/pi/");
         File[] listOfFiles = folder.listFiles();
+        if (listOfFiles == null) {
+            folder = new File(System.getProperty("user.dir"));
+            listOfFiles = folder.listFiles();
+        }
+
         HashSet<String> set = new HashSet<>();
         if (listOfFiles != null) {
             for (File file : listOfFiles) {
@@ -104,6 +109,7 @@ public class Tools {
         upload.setParameters(fileName, identifier, packetLength);
 
         uploads.put(identifier, upload);
+        print("Number of clients: " + uploads.size());
         upload.initialize(socket, slidingWindow, timeOut);
 
 
@@ -130,7 +136,7 @@ public class Tools {
     private static byte getIdentifierForUpload(Map<Byte, Upload> uploads) {
         boolean loop = true;
         byte b = 0;
-        if (uploads.size() > 1) {
+        if (uploads.size() > 0) {
             while (loop) {
                 if (uploads.containsKey(b)) {
                     b++;
@@ -213,25 +219,28 @@ public class Tools {
         byte[] pktNum = Arrays.copyOfRange(data, 2, 6);
         int pktNumber = ByteBuffer.wrap(pktNum).getInt();
         Tools.sendAcknowledgement(packet.getAddress(), packet.getPort(), pktNumber, identifier, socket);
+
         if (download != null) {
-            //print("Server send packet " + pktNumber +  " for download " + identifier + " with size: " + packet.getData().length);
             download.pktTransferred(pktNumber);
             byte[] dataLen = Arrays.copyOfRange(data, 6, 10);
+            print("Received packet " + pktNumber +  " for download " + identifier);
             int dataLength = ByteBuffer.wrap(dataLen).getInt();
             byte[] receivedData = Arrays.copyOfRange(data, 10, 10 + dataLength);
             download.addData(pktNumber, receivedData);
-
             // This method returns true if download is complete
             if (download.isComplete() && download.hasReceivedHash()) {
                 downloads.remove(identifier);
-                download.getInputThread().stopListening();
-                return true;
+                if (download.getInputThread() != null) {
+                    download.getInputThread().stopListening();
+                }
+                    return true;
+                } else {
+                    return false;
+                }
+
             } else {
                 return false;
             }
-        } else {
-            return false;
-        }
     }
 
     public static void processAcknowledgement(DatagramPacket packet, Map<Byte, Upload> uploads) {
@@ -250,7 +259,8 @@ public class Tools {
                 upload.acknowledgePacket(pktNumber);
                 if (upload.isComplete()) {
                     upload.cancelAllTimers();
-                    print("Upload completed!");
+                    double elapsedTime = upload.elapsedTime();
+                    print("Upload completed! Elapsed time: " + elapsedTime);
                     print("Time outs: " + upload.getTimeOuts());
                     uploads.remove(identifier);
                 } else {
@@ -262,7 +272,19 @@ public class Tools {
 
     public static byte[] getHash(String filename) {
         try {
-            File file = new File(filename);
+            String dir = System.getProperty("user.dir") + "/home/pi/" + filename;
+            File file = new File(dir);
+
+            if (!file.exists()) {
+                dir = System.getProperty("user.dir") + "/" + filename;
+                file = new File(dir);
+            }
+            if (!file.exists()) {
+                print("Could not generate hash.");
+                return new byte[0];
+            }
+
+
             MessageDigest md5Digest = MessageDigest.getInstance("MD5");
             try (FileInputStream fis = new FileInputStream(file)) {
                 byte[] byteArray = new byte[1024];
@@ -279,7 +301,6 @@ public class Tools {
             return new byte[0];
         }
     }
-
 
     public static void processHash(DatagramPacket packet, Map<Byte, Download> downloads, DatagramSocket socket) {
         byte[] data = packet.getData();
@@ -317,7 +338,7 @@ public class Tools {
     }
 
     public static boolean fileExists(String filename) {
-        return new File(filename).exists();
+        return new File(System.getProperty("user.dir") + "/home/pi/" + filename).exists() || new File(System.getProperty("user.dir") + "/" + filename).exists();
     }
 
     public static InetAddress getRaspberryAddress(int lower, int upper) {
