@@ -41,11 +41,13 @@ public class InputThread<U extends FileTransfer> extends Thread {
 
     @Override
     public void run() {
-        print("Enter 'p' to pause " + transfer + " or 'a' to abort");
+        print("Enter 'p' to pause " + transfer + ", 'a' to abort or 's' to show stats.");
         while (listen) {
             String answer = scanner.nextLine();
             if (listen) {
-                if (answer.equalsIgnoreCase("p") && !paused) {
+                if (answer.equalsIgnoreCase("s")) {
+                    ft.showStats();
+                } else if (answer.equalsIgnoreCase("p") && !paused) {
                     print(transfer + " paused. Press 'r' to resume transfer.");
                     pauseTransfer();
                     paused = true;
@@ -58,7 +60,7 @@ public class InputThread<U extends FileTransfer> extends Thread {
                     paused = false;
                     resumeTransfer();
                 } else if (!paused) {
-                    print("Incorrect input, valid options are 'p' and 'a'. You typed: " + answer);
+                    print("Incorrect input, valid options are 'p', 'a' and 's'. You typed: " + answer);
                 } else {
                     print("Incorrect input. Press 'r' to resume transfer.");
                 }
@@ -68,6 +70,7 @@ public class InputThread<U extends FileTransfer> extends Thread {
 
     public void stopListening() {
         listen = false;
+        scanner.close();
     }
 
     private void print(String msg) {
@@ -96,7 +99,7 @@ public class InputThread<U extends FileTransfer> extends Thread {
         data[1] = identifier;
         transfers.remove(identifier);
         send(data);
-        scanner.close();
+        stopListening();
     }
 
     private void resumeTransfer() {

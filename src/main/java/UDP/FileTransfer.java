@@ -46,4 +46,13 @@ public abstract class FileTransfer {
     public int getFileSize() {
         return fileSize;
     }
+
+    public void showStats() {
+        int percent = (100 * numberOfPktsTransfered) / numberOfPkts;
+        print("Filetransfer " + percent + "% completed.");
+    }
+
+    private void print(String msg) {
+        System.out.println(msg);
+    }
 }

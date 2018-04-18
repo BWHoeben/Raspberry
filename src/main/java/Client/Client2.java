@@ -22,6 +22,7 @@ public class Client2 implements Computer {
     private static HashMap<Byte, HandleHashThread> hashThreads = new HashMap<>();
     private static ListenThread lt;
     private static Timer  timerForReq;
+    private static InputThread<Upload> it;
 
     private static Scanner scanner = new Scanner(System.in);
 
@@ -41,7 +42,7 @@ public class Client2 implements Computer {
 
     private static void upOrDown(InetAddress address) {
         while (true) {
-            print("Download or upload? (u/d)");
+            print("Download or upload? (d/u)");
             String answer = scanner.nextLine();
             if (answer.equalsIgnoreCase("u")) {
                 Destination destination = new Destination(Tools.getPort(), address);
@@ -59,7 +60,7 @@ public class Client2 implements Computer {
                 }
                 break;
             } else {
-                print("Unkown input. Please provide 'u' or 'd'.");
+                print("Unkown input. Please provide 'd' or 'u'.");
             }
         }
     }
@@ -102,7 +103,7 @@ public class Client2 implements Computer {
             lt = new ListenThread(socket, new Client2(socket));
             lt.start();
             Upload upload = uploads.get(identifier);
-            InputThread<Upload> it = new InputThread<>(scanner, identifier, destination, socket, upload, uploads);
+            it = new InputThread<>(scanner, identifier, destination, socket, upload, uploads);
             it.start();
         } catch (IOException e) {
             print(e.getMessage());
@@ -131,7 +132,9 @@ public class Client2 implements Computer {
                 downloadPacket(packet);
                 break;
             case Protocol.ACKDOWN:
-                Tools.processAcknowledgement(packet, uploads);
+                if (Tools.processAcknowledgement(packet, uploads)) {
+                    terminate();
+                }
                 break;
             case Protocol.HASH:
                 Tools.processHash(packet, downloads, socket);
@@ -170,9 +173,13 @@ public class Client2 implements Computer {
         }
     }
 
-    private void terminate() {
+    public void terminate() {
         print("Terminating connection...");
         lt.stopListening();
+        if (it != null) {
+            it.stopListening();
+        }
+        scanner.close();
     }
 
 
